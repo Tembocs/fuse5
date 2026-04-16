@@ -517,6 +517,22 @@ Required files:
 - `rules.md`
 - `learning-log.md`
 
+Required subdirectories:
+
+- `implementation/` — per-wave plan files (one file per wave,
+  `wave00_governance.md` through `wave26_targets_and_ecosystem.md`).
+  `implementation-plan.md` is the index for this directory: it holds the
+  overview, working principles, naming conventions, task format, wave format,
+  waves-at-a-glance table (with links), per-wave plan index, and cross-cutting
+  constraints. The detail of each wave — goal, entry criterion, state on
+  entry, exit criteria, proof of completion, implementation phases, and wave
+  closure phase — lives in the matching per-wave file. The index and the
+  per-wave files are jointly normative; if they disagree, the per-wave file
+  is authoritative for wave-local detail and the index is authoritative for
+  wave ordering and cross-cutting constraints. References to "the
+  implementation plan" in other docs resolve to `implementation-plan.md` as
+  the entry point.
+
 Optional supporting directories:
 
 - `adr/` for architecture decisions that cannot live in the language reference
