@@ -1,0 +1,30 @@
+# Build output
+/bin/
+/stage2_out/
+/stage2/build/
+/runtime/build/
+*.exe
+*.o
+*.obj
+*.a
+
+# Go coverage and profiling artifacts
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Incremental-compile cache (W04 / W18)
+.fuse-cache/
+
+# Editor and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local overrides
+/.claude/settings.local.json

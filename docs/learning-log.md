@@ -833,3 +833,80 @@ the wave must match the granularity of the integration risk.
 This entry is verified when Wave 17 Phase 05 Task 01 passes: the proof program
 `fn identity[T](x: T) -> T { return x; } fn main() -> I32 { return identity[I32](42); }`
 compiles, runs, and exits with code 42.
+
+### WC000 — Wave 00 Closure
+
+Date: 2026-04-16
+Wave: 00 — Governance and Phase Model
+
+**Proof programs added this wave**:
+None. Wave 00 delivers repository, module, build, CI, tooling, and
+governance scaffolding; no user-visible language behavior is introduced,
+so no `tests/e2e/` proof programs are required (Rule 6.8 applies from W05
+onward when the minimal end-to-end spine exists).
+
+**Stubs retired this wave**:
+None. Wave 00 is the seeding wave: it populates `STUBS.md` with entries
+for every feature scheduled for W01–W30 but retires none of them.
+
+**Stubs introduced this wave**:
+Thirty top-level stubs seeded in `STUBS.md` Active table, one per
+downstream wave W01–W30. Each names its owning package (creating the
+package directory where one was missing), declares the diagnostic the
+compiler must emit once that package starts participating in the pipeline,
+and is tagged with its retiring wave. Full list in the W00 block of the
+`STUBS.md` Stub history.
+
+**What was harder than planned**:
+- The originally-specified Verify command `go run tools/checkstubs/main.go
+  -audit-seed` requires the tool's entire implementation to live in a
+  single file (Go's `go run <file>` form only loads the named file). The
+  tool was initially split into `main.go` + `stubs.go`; that split was
+  reverted into a single-file package so the plan's Verify command works
+  as written. Worth noting for other tools scheduled later whose Verify
+  commands use the same form.
+- The repository-layout.md §12 phrasing "CI configuration lives under
+  `.ci/`" collides with GitHub Actions' requirement that workflows live
+  at `.github/workflows/`. Resolved by placing the canonical workflow at
+  `.github/workflows/ci.yml` and reserving `.ci/` for helper scripts,
+  with a README in `.ci/` documenting the arrangement. No normative doc
+  change was needed; `.ci/` remains where helpers will land (W17 perf
+  driver, W23 package-manager fetcher smoke test, W25 reproducibility
+  gate, W27 perf gate).
+
+**What the next wave must know**:
+- The Stage 1 CLI at `cmd/fuse` is a Wave 00 stub: only `version` and
+  `help` subcommands. `build`, `run`, `check`, `test`, `fmt`, `doc`, and
+  `repl` all land in W18. Until then, any test that invokes those
+  subcommands must expect a non-zero exit.
+- Every compiler package under `compiler/` is a doc-only stub. The
+  `doc.go` files name each package's responsibility and the wave that
+  retires the stub; they do not yet export any symbols beyond the package
+  declaration.
+- `tests/perf/` exists as an empty directory from W00. W17-P13 seeds the
+  baseline corpus; W27 is the gating wave.
+- The governance tools under `tools/` are minimal — enough for W00
+  exit criteria and cross-platform CI. They will be extended as later
+  waves need stricter checks (W22 Stub Clearance, W30 docs site
+  validation). Tool extensions must remain single-file packages to keep
+  the plan's `go run tools/X/main.go` Verify form working.
+- `.claude/current-wave.json` is the coordination file for multi-machine
+  and multi-agent work (Rule 11). Every wave transition updates this file
+  as part of PCL.
+
+**Verification**:
+```
+make all
+go test ./...
+go run tools/checkstubs/main.go
+go run tools/checkstubs/main.go -audit-seed
+go run tools/checklayout/main.go
+go run tools/checkdocs/main.go -foundational
+go run tools/checkartifacts/main.go
+go run tools/checkci/main.go
+go run tools/checkgov/main.go -current-wave
+go run tools/checkstubs/main.go -history-current-wave W00
+grep "WC000" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.26.2). CI
+matrix green on the committed SHA is the authoritative record.
