@@ -325,6 +325,31 @@ The stub history log is the project's audit trail for stub lifecycle: any
 reader can answer "when was this stub introduced?", "when was it retired?",
 and "what evidence confirmed its retirement?" from the log alone.
 
+### Rule 6.17 — Every diagnostic carries primary span, explanation, and suggestion.
+
+Every compiler diagnostic must include:
+
+1. A **primary span** pointing at the most specific source location the user
+   can act on — not a whole file, not a whole function when a single token is
+   the problem.
+2. A **one-line explanation** written so the user understands what went wrong
+   without reading the rule cross-reference. Reference text appended after the
+   explanation is allowed.
+3. A **suggestion** where one is possible — the concrete alternative the user
+   most likely meant, phrased as an action. Not every diagnostic can offer a
+   suggestion; those that can, must.
+
+Diagnostic quality is a first-class correctness concern, not a polish phase.
+Every wave that introduces new diagnostics must include a review step that
+confirms each new diagnostic meets this rule. A diagnostic that renders
+("the text appears") but fails the rule is a quality defect, not a working
+diagnostic.
+
+This rule is the project's forcing function against the failure mode where a
+compiler technically emits errors but users cannot act on them without guessing
+or reading the source. Rust's developer experience lead is 80% diagnostic
+quality; Fuse will not ship less.
+
 ## 7. Determinism rules
 
 ### Rule 7.1 — Same input, same bytes.

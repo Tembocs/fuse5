@@ -37,6 +37,12 @@ Exit criteria:
   target profile
 - determinism gates: same source → byte-identical C
 - every regression from L001–L015 has a test
+- debug info emitted through the C backend: `-g` passthrough plus a
+  Fuse→C line mapping good enough for `gdb`/`lldb` to break on a Fuse
+  source line and print a local by Fuse-level name
+- performance baseline established: `tests/perf/` seeded with benchmarks
+  for the compiler's own hot paths and for user programs; thresholds
+  recorded in `tests/perf/README.md` and gated in CI
 
 Proof of completion:
 
@@ -57,6 +63,9 @@ go test ./compiler/codegen/... -run TestPtrNullEmission -v
 go test ./compiler/codegen/... -run TestSizeOfEmission -v
 go test ./compiler/codegen/... -run TestUnionLayout -v
 go test ./compiler/codegen/... -run TestOverflowPolicy -v
+go test ./compiler/codegen/... -run TestDebugInfoEmission -v
+go test ./tests/e2e/... -run TestDebugBreakpointInGdb -v
+go test ./tests/perf/... -run TestPerfBaseline -v
 make repro
 ```
 
@@ -152,6 +161,60 @@ make repro
   Verify: `go test ./compiler/codegen/... -run TestHistoricalRegressions -v`
 - Task 02: Reproducibility [W17-P11-T02-REPRO]
   Verify: `make repro`
+
+## Phase 12: Debug Info Through C Backend [W17-P12-DEBUG-INFO]
+
+Fuse's developer-experience promise requires source-level debugging from
+the first shipping compiler. Bootstrap debug info rides on the C backend:
+the emitted C preserves original Fuse line numbers via `#line` directives,
+and the C compiler is invoked with `-g` so the native debugger sees Fuse
+sources directly.
+
+- Task 01: `#line` directive emission [W17-P12-T01-LINE-DIRECTIVES]
+  DoD: every MIR-derived C statement is preceded by a `#line N "path.fuse"`
+  directive when the originating HIR node has a span. Synthesized code
+  with no originating span is explicitly marked.
+  Verify: `go test ./compiler/codegen/... -run TestLineDirectives -v`
+- Task 02: `-g` passthrough and build integration [W17-P12-T02-GFLAG]
+  DoD: `fuse build --debug` passes `-g` to the C compiler; `fuse build`
+  without `--debug` does not. Release builds stay free of debug bloat.
+  Verify: `go test ./compiler/cc/... -run TestDebugFlagPassthrough -v`
+- Task 03: Fuse-named local visibility [W17-P12-T03-LOCAL-NAMES]
+  DoD: local variable names in emitted C preserve their Fuse-level
+  identifiers (through sanitization), so `gdb` / `lldb` can read them
+  by the name the user wrote.
+  Verify: `go test ./compiler/codegen/... -run TestDebugInfoEmission -v`
+- Task 04: End-to-end gdb breakpoint proof [W17-P12-T04-GDB-PROOF]
+  DoD: an e2e test compiles `tests/e2e/debug_breakpoint.fuse` with
+  `--debug`, runs it under a scripted `gdb` session, breaks on a Fuse
+  source line, reads a local by Fuse name, and confirms the values.
+  Test is skipped if no debugger is available on the host but runs in CI
+  on Linux at minimum.
+  Verify: `go test ./tests/e2e/... -run TestDebugBreakpointInGdb -v`
+
+## Phase 13: Performance Baseline [W17-P13-PERF-BASELINE]
+
+The project claims speed; the project must measure speed. This phase
+establishes `tests/perf/` and commits thresholds that the rest of the
+project agrees to hold. W27 later becomes the full gate; this phase is the
+first honest measurement.
+
+- Task 01: Create `tests/perf/` corpus [W17-P13-T01-CORPUS]
+  DoD: the corpus contains at minimum: (a) a compiler self-host proxy
+  (lexing and parsing a 50kloc corpus), (b) a monomorphization-heavy
+  workload, (c) a tight arithmetic loop, (d) a channel-and-spawn workload.
+  Each benchmark has an input, a driver, and a threshold.
+  Verify: `go test ./tests/perf/... -run TestPerfCorpusPresent -v`
+- Task 02: Record baseline thresholds [W17-P13-T02-THRESHOLDS]
+  DoD: `tests/perf/README.md` lists every benchmark with its wall-clock
+  ceiling (or ratio to a named C reference) for the tier-1 CI host. A
+  regression past the ceiling fails CI.
+  Verify: `go test ./tests/perf/... -run TestPerfBaseline -v`
+- Task 03: CI wiring [W17-P13-T03-CI]
+  DoD: the perf suite runs on the tier-1 CI host. Results are logged
+  with sufficient metadata (commit, host, wall-clock, peak memory) to
+  detect drift over time.
+  Verify: `go run tools/checkci/main.go -perf-baseline`
 
 ## Wave Closure Phase [W17-PCL-WAVE-CLOSURE]
 

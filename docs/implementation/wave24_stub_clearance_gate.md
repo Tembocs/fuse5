@@ -1,4 +1,4 @@
-# Wave 22: Stub Clearance Gate
+# Wave 24: Stub Clearance Gate
 
 > Part of the [Fuse implementation plan](../implementation-plan.md).
 
@@ -12,7 +12,7 @@ reached self-hosting with silent stubs still in place, and those stubs
 later surfaced as missing features (L013, L015). The clearance wave is
 the forcing function that guarantees they cannot slip through.
 
-Entry criterion: W21 done. Phase 00 confirms no overdue stubs.
+Entry criterion: W23 done. Phase 00 confirms no overdue stubs.
 
 State on entry: the Active stubs table may or may not be empty. Any
 remaining entries represent features whose retirement was delayed past
@@ -40,15 +40,15 @@ go test ./... -v
 go test ./tests/e2e/... -v
 ```
 
-## Phase 00: Stub Audit [W22-P00-STUB-AUDIT]
+## Phase 00: Stub Audit [W24-P00-STUB-AUDIT]
 
-- Task 01: Enumerate remaining stubs [W22-P00-T01-ENUMERATE]
+- Task 01: Enumerate remaining stubs [W24-P00-T01-ENUMERATE]
   DoD: the Phase 00 audit produces a prioritized list of every remaining
   stub with its retirement path. A stub without a clear retirement path
   is escalated to the user.
-  Verify: `go run tools/checkstubs/main.go -wave W22 -phase P00 -enumerate`
+  Verify: `go run tools/checkstubs/main.go -wave W24 -phase P00 -enumerate`
 
-## Phase 01: Retire Remaining Stubs [W22-P01-RETIRE]
+## Phase 01: Retire Remaining Stubs [W24-P01-RETIRE]
 
 This phase has one task per remaining stub. Stubs are retired in reverse
 dependency order: leaf features first, cross-cutting features last. Each
@@ -56,41 +56,41 @@ retirement follows the normal pattern: retire the stub in the code, add a
 proof program that would fail if the stub were reinstated, update
 STUBS.md.
 
-- Task 01..N: one task per stub, each with its own `[W22-P01-Txx-...]`
+- Task 01..N: one task per stub, each with its own `[W24-P01-Txx-...]`
   identifier.
   DoD: every stub retired with a corresponding proof program committed to
   `tests/e2e/` or a checker regression test. Each retirement records a
   line in the Stub history log.
-  Verify: `go run tools/checkstubs/main.go -wave W22 -retired <stub-name>`
+  Verify: `go run tools/checkstubs/main.go -wave W24 -retired <stub-name>`
 
-## Phase 02: Reference Status Audit [W22-P02-REF-AUDIT]
+## Phase 02: Reference Status Audit [W24-P02-REF-AUDIT]
 
-- Task 01: Verify every reference section is `DONE` [W22-P02-T01-REF]
+- Task 01: Verify every reference section is `DONE` [W24-P02-T01-REF]
   DoD: `tools/checkref -all-done` reports every feature section tagged
   `DONE — Wxx` pointing at the wave that retired it.
   Verify: `go run tools/checkref/main.go -all-done`
 - Task 02: Verify every feature has a committed proof or regression
-  [W22-P02-T02-PROOFS]
+  [W24-P02-T02-PROOFS]
   DoD: `tests/e2e/README.md` lists a program or test for every reference
   feature. Orphan references are a CI failure.
   Verify: `go run tools/checkref/main.go -proof-coverage`
 
-## Phase 03: Clean Build Gate [W22-P03-CLEAN-BUILD]
+## Phase 03: Clean Build Gate [W24-P03-CLEAN-BUILD]
 
-- Task 01: Full test suite passes on all hosts [W22-P03-T01-FULL-TEST]
+- Task 01: Full test suite passes on all hosts [W24-P03-T01-FULL-TEST]
   Verify: CI green on Linux, macOS, Windows for the full suite
   (unit + e2e + property + bootstrap harness).
-- Task 02: Empty Active stubs [W22-P03-T02-EMPTY]
+- Task 02: Empty Active stubs [W24-P03-T02-EMPTY]
   Verify: `go run tools/checkstubs/main.go -require-empty-active`
 
-## Wave Closure Phase [W22-PCL-WAVE-CLOSURE]
+## Wave Closure Phase [W24-PCL-WAVE-CLOSURE]
 
-- Task 01: Stub history closure [W22-PCL-T01-HISTORY]
-  DoD: `## W22` block in STUBS.md Stub history lists every stub retired
+- Task 01: Stub history closure [W24-PCL-T01-HISTORY]
+  DoD: `## W24` block in STUBS.md Stub history lists every stub retired
   this wave, with the proof program that confirmed it.
-  Verify: `go run tools/checkstubs/main.go -wave W22`
-- Task 02: Write WC022 learning-log entry [W22-PCL-T02-CLOSURE-LOG]
-  DoD: WC022 records which stubs remained until this late (and why), what
+  Verify: `go run tools/checkstubs/main.go -wave W24`
+- Task 02: Write WC024 learning-log entry [W24-PCL-T02-CLOSURE-LOG]
+  DoD: WC024 records which stubs remained until this late (and why), what
   the clearance wave surfaced, and the assertion that no stub remains.
-  Verify: `grep "WC022" docs/learning-log.md`
+  Verify: `grep "WC024" docs/learning-log.md`
 

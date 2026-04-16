@@ -20,6 +20,9 @@ Exit criteria:
 - invariant walkers run in debug and CI
 - AST-to-HIR bridge preserves resolved types — no `Unknown` defaults (L013)
 - `KindChannel` and `KindThreadHandle` type kinds defined (used in W07)
+- pass manifest and IR node identity are shaped to support incremental
+  recompilation (used by W18 incremental driver and W19 language server);
+  every pass declares an input fingerprint function and a stable output key
 
 Proof of completion:
 
@@ -30,6 +33,8 @@ go test ./compiler/hir/... -run TestInvariantWalkers -v
 go test ./compiler/hir/... -run TestBuilderEnforcement -v
 go test ./compiler/hir/... -run TestAstToHirTypePreservation -v
 go test ./compiler/hir/... -run TestDeterministicOrder -count=3 -v
+go test ./compiler/hir/... -run TestPassFingerprintStable -count=3 -v
+go test ./compiler/hir/... -run TestIncrementalSubstitutable -v
 ```
 
 ## Phase 00: Stub Audit [W04-P00-STUB-AUDIT]
@@ -79,6 +84,32 @@ go test ./compiler/hir/... -run TestDeterministicOrder -count=3 -v
   Verify: `go test ./compiler/hir/... -run TestInvariantWalkers -v`
 - Task 03: Deterministic IR collections [W04-P04-T03-DETERMINISM]
   Verify: `go test ./compiler/hir/... -run TestDeterministicOrder -count=3 -v`
+
+## Phase 05: Incremental Compilation Foundation [W04-P05-INCREMENTAL]
+
+This phase lays the architectural groundwork for W18 (incremental driver)
+and W19 (language server). It is scheduled here, at the pass-graph wave,
+because retrofitting incremental semantics into a mature pass set is a
+rewrite. Designing them in at the pass-manifest stage is cheap.
+
+- Task 01: Pass fingerprint contract [W04-P05-T01-FINGERPRINT]
+  DoD: every pass in the manifest declares (a) a deterministic fingerprint
+  function over its declared inputs, and (b) a stable output key. Two
+  semantically equivalent inputs must produce byte-identical fingerprints
+  across three runs on Linux, macOS, and Windows.
+  Verify: `go test ./compiler/hir/... -run TestPassFingerprintStable -count=3 -v`
+- Task 02: Stable IR node identity [W04-P05-T02-STABLE-IDENTITY]
+  DoD: HIR nodes carry identity keys that survive unrelated source edits.
+  A source edit that changes function `f` must not invalidate the identity
+  keys of unrelated function `g`. Identity keys are derived from module
+  path + item name + local path, not from allocation order.
+  Verify: `go test ./compiler/hir/... -run TestStableNodeIdentity -v`
+- Task 03: Incremental substitutability [W04-P05-T03-SUBSTITUTABLE]
+  DoD: the pass graph supports replacing a pass's cached output with a
+  freshly computed one without full pipeline invalidation, as verified by
+  a unit test that constructs a two-function program, invalidates one
+  function's HIR, and confirms only the dependent passes re-run.
+  Verify: `go test ./compiler/hir/... -run TestIncrementalSubstitutable -v`
 
 ## Wave Closure Phase [W04-PCL-WAVE-CLOSURE]
 

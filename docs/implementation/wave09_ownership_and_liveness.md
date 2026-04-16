@@ -3,8 +3,10 @@
 > Part of the [Fuse implementation plan](../implementation-plan.md).
 
 
-Goal: compute ownership and liveness once, enforce no-borrow-in-struct-field,
-and emit actual destructor calls for types with `Drop` impls.
+Goal: compute ownership and liveness once, enforce the full borrow-rule set
+(no-borrow-in-struct-field, return-borrow rule, aliasing exclusion,
+use-after-move rejection), and emit actual destructor calls for types with
+`Drop` impls.
 
 Entry criterion: W08 done. Phase 00 confirms no overdue stubs.
 
@@ -14,9 +16,18 @@ Exit criteria:
 - liveness computed exactly once per function
 - borrow lowering uses `InstrBorrow` with precise kind
 - no borrows in struct fields (reference §54.1)
+- borrows returned from a function must point into a borrowed parameter
+  (reference §54.6); returning a borrow to a local is a diagnostic
+- `mutref` aliasing rejected: no coexisting `mutref` + `ref`, no two `mutref`
+  to overlapping memory
+- use-after-move rejected: moved locals and moved-from fields may not be
+  read again on any path
 - drop metadata flows from checker to codegen
 - `InstrDrop` emits `TypeName_drop(&_lN);` for types with `Drop`
 - proof program: type with `Drop` impl demonstrates observable cleanup
+- rejection proofs: borrow-in-field, return-local-borrow, aliased-mutref,
+  and use-after-move each have a committed `.fuse` fixture that must fail
+  to compile with the declared diagnostic
 
 Proof of completion:
 
@@ -24,8 +35,12 @@ Proof of completion:
 go test ./compiler/liveness/... -v
 go test ./compiler/liveness/... -run TestSingleLiveness -v
 go test ./compiler/liveness/... -run TestDestructionOnAllPaths -v
+go test ./compiler/liveness/... -run TestReturnBorrowRule -v
+go test ./compiler/liveness/... -run TestMutrefAliasing -v
+go test ./compiler/liveness/... -run TestUseAfterMove -v
 go test ./compiler/codegen/... -run TestDestructorCallEmitted -v
 go test ./tests/e2e/... -run TestDropObservable -v
+go test ./tests/e2e/... -run TestBorrowRejections -v
 ```
 
 ## Phase 00: Stub Audit [W09-P00-STUB-AUDIT]
@@ -37,8 +52,28 @@ go test ./tests/e2e/... -run TestDropObservable -v
 
 - Task 01: Ownership contexts [W09-P01-T01-CONTEXTS]
   Verify: `go test ./compiler/liveness/... -run TestOwnershipContexts -v`
-- Task 02: Borrow rules and no-borrow-in-field [W09-P01-T02-BORROW]
-  Verify: `go test ./compiler/liveness/... -run TestBorrowRules -v`
+- Task 02: No-borrow-in-struct-field [W09-P01-T02-NO-BORROW-IN-FIELD]
+  DoD: struct declarations whose field types contain `ref T` or `mutref T`
+  at any nesting depth are rejected (reference §54.1). Rejection includes a
+  specific diagnostic naming the offending field and citing §54.
+  Verify: `go test ./compiler/liveness/... -run TestNoBorrowInField -v`
+- Task 03: Return-borrow rule [W09-P01-T03-RETURN-BORROW]
+  DoD: a function returning `ref T` or `mutref T` must be returning a
+  borrow that points into a parameter that was itself borrowed (reference
+  §54.6). Returning a borrow to a local binding or to a temporary is
+  rejected with a specific diagnostic. This rule is enforced structurally
+  by the ownership checker, without lifetime variables.
+  Verify: `go test ./compiler/liveness/... -run TestReturnBorrowRule -v`
+- Task 04: Aliasing exclusion for `mutref` [W09-P01-T04-MUTREF-ALIASING]
+  DoD: the checker rejects (a) a `mutref` that coexists with any other
+  borrow to the same memory, (b) two `mutref` borrows whose memory
+  footprints overlap. Overlap is determined structurally, not heuristically.
+  Verify: `go test ./compiler/liveness/... -run TestMutrefAliasing -v`
+- Task 05: Use-after-move rejection [W09-P01-T05-USE-AFTER-MOVE]
+  DoD: any read of a local after its ownership has been transferred by
+  `move`, `owned`, or function-call move semantics is a compile error on
+  every control-flow path that could observe the read.
+  Verify: `go test ./compiler/liveness/... -run TestUseAfterMove -v`
 
 ## Phase 02: Single Liveness Computation [W09-P02-LIVENESS]
 
@@ -61,10 +96,18 @@ go test ./tests/e2e/... -run TestDropObservable -v
 - Task 01: Loops, breaks, early returns [W09-P04-T01-CFLOW]
   Verify: `go test ./compiler/liveness/... -run TestDestructionOnAllPaths -v`
 
-## Phase 05: Drop Proof Program [W09-P05-PROOF]
+## Phase 05: Drop and Borrow Rejection Proofs [W09-P05-PROOF]
 
 - Task 01: `drop_observable.fuse` [W09-P05-T01-PROOF]
   Verify: `go test ./tests/e2e/... -run TestDropObservable -v`
+- Task 02: Borrow rejection fixtures [W09-P05-T02-BORROW-REJECTIONS]
+  DoD: `tests/e2e/` contains four committed `.fuse` fixtures, each of which
+  must fail to compile with a specific named diagnostic:
+  `reject_borrow_in_field.fuse`, `reject_return_local_borrow.fuse`,
+  `reject_aliased_mutref.fuse`, `reject_use_after_move.fuse`. The e2e
+  runner confirms each one fails and that the diagnostic text matches the
+  golden.
+  Verify: `go test ./tests/e2e/... -run TestBorrowRejections -v`
 
 ## Wave Closure Phase [W09-PCL-WAVE-CLOSURE]
 

@@ -3822,6 +3822,15 @@ struct NonSendResource {
   `Copy` and `T` does not implement `Drop`. A manual impl of `Drop` for
   a type that would otherwise be `Copy` removes the auto `Copy` impl.
 
+#### Borrow types are not Send or Sync
+
+Borrow types `ref T` and `mutref T` are never `Send` and never `Sync`,
+regardless of whether `T` itself implements those traits. Borrows are
+scope-local by §54 and cannot outlive their owner; a borrow that crossed a
+thread boundary would require lifetime reasoning Fuse intentionally does not
+provide. The checker must reject `spawn` captures, `Chan[T]` element types,
+and `Shared[T]` inner types that contain a borrow at any nesting depth.
+
 #### Opting out
 
 A type may opt out of an auto-implemented marker by declaring a negative

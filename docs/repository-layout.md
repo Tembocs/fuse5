@@ -475,6 +475,20 @@ Self-hosting and reproducibility tests.
 Property-based tests, especially around IR transformations and semantic
 preservation.
 
+### `tests/perf/`
+
+Performance benchmarks with wall-clock and codegen-quality assertions.
+Populated from W17 (bootstrap C11 baseline) onward and gated by W27
+(Performance Gate). Each benchmark carries an explicit threshold; a
+regression past the threshold fails CI on the same footing as a broken test.
+
+**`tests/perf/README.md`** is a required normative file. It lists every
+benchmark, the wave that introduced it, the workload it exercises, and the
+current target (wall-clock ceiling, or a ratio against a named reference
+implementation). The format mirrors `tests/e2e/README.md`. Regressions that
+are accepted deliberately update the target with a commit-message rationale;
+silent baseline drift is forbidden.
+
 Pass-local tests still belong next to the packages they exercise. The top-level
 `tests/` tree is for cross-package and end-to-end assets, not as a dumping
 ground.

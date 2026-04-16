@@ -41,8 +41,20 @@ native backend.
 9. Every feature in the language reference is scheduled to a concrete wave
    (Rule 2.5). No `Wave TBD`, no "post-v1".
 10. Before self-hosting begins, a dedicated Stub Clearance Gate wave
-    (W22) confirms the Active stubs table is empty. No stub reaches the
+    (W24) confirms the Active stubs table is empty. No stub reaches the
     bootstrap.
+11. Developer experience is a first-class promise. Language Server (W19),
+    incremental compile (W04+W18), source-level debugging (W17+W26),
+    package management (W23), and user-facing documentation (W30) each
+    have dedicated schedule entries. The project does not ship with DX
+    gaps it cannot defend.
+12. Speed is measured, not assumed. The performance corpus (W17-P13) is
+    populated during bootstrap and gated by a dedicated Performance Gate
+    wave (W27) before Go and C are retired. Thresholds are enforced in
+    CI against named reference implementations.
+13. Every user-facing compiler diagnostic carries a primary span, a
+    one-line explanation, and a suggestion where one is possible
+    (Rule 6.17). Diagnostic quality is a correctness concern, not polish.
 
 ## Naming conventions
 
@@ -117,12 +129,12 @@ Every wave contains:
 | [01](implementation/wave01_lexer.md) | Lexer | W00 done | every token kind and lexical ambiguity covered |
 | [02](implementation/wave02_parser_and_ast.md) | Parser and AST | W01 done | all language constructs parse deterministically |
 | [03](implementation/wave03_resolution.md) | Resolution | W02 done | module graph, imports, symbols resolved; `@cfg`; visibility |
-| [04](implementation/wave04_hir_and_typetable.md) | HIR and TypeTable | W03 done | typed HIR shape and pass graph enforced |
+| [04](implementation/wave04_hir_and_typetable.md) | HIR and TypeTable | W03 done | typed HIR shape, pass graph, incremental-compile foundation |
 | [05](implementation/wave05_minimal_end_to_end_spine.md) | Minimal End-to-End Spine | W04 done | `fn main() -> I32 { return N; }` runs and exits with N |
 | [06](implementation/wave06_type_checking.md) | Type Checking | W05 done | stdlib and user bodies type-check with no unknowns |
 | [07](implementation/wave07_concurrency_semantics.md) | Concurrency Semantics | W06 done | Send/Sync, Chan[T], spawn, ThreadHandle enforced by checker |
 | [08](implementation/wave08_monomorphization.md) | Monomorphization | W07 done | generics compile end-to-end with proof programs |
-| [09](implementation/wave09_ownership_and_liveness.md) | Ownership and Liveness | W08 done | single liveness computation + drop codegen with proof |
+| [09](implementation/wave09_ownership_and_liveness.md) | Ownership and Liveness | W08 done | borrow rules (field / return / aliasing / use-after-move) enforced; drop codegen with proof |
 | [10](implementation/wave10_pattern_matching.md) | Pattern Matching | W09 done | match dispatch, exhaustiveness, proof program |
 | [11](implementation/wave11_error_propagation.md) | Error Propagation | W10 done | `?` branch lowering with proof program |
 | [12](implementation/wave12_closures_and_callable_traits.md) | Closures and Callable Traits | W11 done | capture, lift, env struct, Fn/FnMut/FnOnce with proof |
@@ -130,16 +142,20 @@ Every wave contains:
 | [14](implementation/wave14_compile_time_evaluation.md) | Compile-Time Evaluation (`const fn`) | W13 done | const evaluator over checked HIR with proof |
 | [15](implementation/wave15_lowering_and_mir_consolidation.md) | Lowering and MIR Consolidation | W14 done | MIR invariants; casts, fn-pointers, slice range, struct update all lowered |
 | [16](implementation/wave16_runtime_abi.md) | Runtime ABI | W15 done | full runtime replaces stub; IO + threading work |
-| [17](implementation/wave17_codegen_c11_hardening.md) | Codegen C11 Hardening | W16 done | all backend contracts enforced; `@repr`, `@align`, intrinsics, variadic, size_of, Ptr.null emission |
-| [18](implementation/wave18_cli_and_diagnostics.md) | CLI and Diagnostics | W17 done | `fuse build/run/check/test/fmt/doc/repl` coherent |
-| [19](implementation/wave19_stdlib_core.md) | Stdlib Core | W18 done | core traits, primitives, strings, collections, Cell/RefCell, Ptr.null, overflow methods |
-| [20](implementation/wave20_custom_allocators.md) | Custom Allocators | W19 done | Allocator trait; collections accept allocator; proof program with bump allocator |
-| [21](implementation/wave21_stdlib_hosted.md) | Stdlib Hosted | W20 done | IO, fs, os, time, thread, sync, channels ship |
-| [22](implementation/wave22_stub_clearance_gate.md) | Stub Clearance Gate | W21 done | Active stubs table is empty; no stub reaches Stage 2 |
-| [23](implementation/wave23_stage2_and_self_hosting.md) | Stage 2 and Self-Hosting | W22 done | stage1 compiles stage2; stage2 compiles itself reproducibly |
-| [24](implementation/wave24_native_backend_transition.md) | Native Backend Transition | W23 done | stage2 compiles without C11 backend dependency |
-| [25](implementation/wave25_retirement_of_go_and_c.md) | Retirement of Go and C | W24 done | Fuse owns the compiler implementation path |
-| [26](implementation/wave26_targets_and_ecosystem.md) | Targets and Ecosystem | W25 done | cross-target and library growth on native base |
+| [17](implementation/wave17_codegen_c11_hardening.md) | Codegen C11 Hardening | W16 done | backend contracts enforced; debug info via C; perf baseline seeded |
+| [18](implementation/wave18_cli_and_diagnostics.md) | CLI and Diagnostics | W17 done | `fuse build/run/check/test/fmt/doc/repl` + diagnostic-quality audit + incremental driver |
+| [19](implementation/wave19_language_server.md) | Language Server | W18 done | LSP 3.17 server: diagnostics, hover, goto-def, completion, symbols |
+| [20](implementation/wave20_stdlib_core.md) | Stdlib Core | W19 done | core traits, primitives, strings, collections, Cell/RefCell, Ptr.null, overflow methods |
+| [21](implementation/wave21_custom_allocators.md) | Custom Allocators | W20 done | Allocator trait; collections accept allocator; proof program with bump allocator |
+| [22](implementation/wave22_stdlib_hosted.md) | Stdlib Hosted | W21 done | IO, fs, os, time, thread, sync, channels, network ship |
+| [23](implementation/wave23_package_management.md) | Package Management | W22 done | manifest, lockfile, resolver, fetcher, registry protocol, two-crate proof |
+| [24](implementation/wave24_stub_clearance_gate.md) | Stub Clearance Gate | W23 done | Active stubs table is empty; no stub reaches Stage 2 |
+| [25](implementation/wave25_stage2_and_self_hosting.md) | Stage 2 and Self-Hosting | W24 done | stage1 compiles stage2; stage2 compiles itself reproducibly |
+| [26](implementation/wave26_native_backend_transition.md) | Native Backend Transition | W25 done | stage2 compiles without C11 backend dependency; native DWARF |
+| [27](implementation/wave27_performance_gate.md) | Performance Gate | W26 done | runtime ratios, compile-time budgets, code-size, memory footprint gated in CI |
+| [28](implementation/wave28_retirement_of_go_and_c.md) | Retirement of Go and C | W27 done | Fuse owns the compiler implementation path |
+| [29](implementation/wave29_targets_and_native_expansion.md) | Targets and Native Expansion | W28 done | cross-target matrix and `stdlib/ext/` on native base |
+| [30](implementation/wave30_ecosystem_documentation.md) | Ecosystem Documentation | W29 done | tutorial, book, migration guides, ecosystem guide, published docs site |
 
 Every feature documented in `docs/fuse-language-reference.md` is scheduled
 to one or more of the waves above. No feature is deferred to a later
@@ -169,14 +185,18 @@ Full detail for each wave — goal, entry criterion, state on entry, exit criter
 - [Wave 16: Runtime ABI](implementation/wave16_runtime_abi.md)
 - [Wave 17: Codegen C11 Hardening](implementation/wave17_codegen_c11_hardening.md)
 - [Wave 18: CLI and Diagnostics](implementation/wave18_cli_and_diagnostics.md)
-- [Wave 19: Stdlib Core](implementation/wave19_stdlib_core.md)
-- [Wave 20: Custom Allocators](implementation/wave20_custom_allocators.md)
-- [Wave 21: Stdlib Hosted](implementation/wave21_stdlib_hosted.md)
-- [Wave 22: Stub Clearance Gate](implementation/wave22_stub_clearance_gate.md)
-- [Wave 23: Stage 2 and Self-Hosting](implementation/wave23_stage2_and_self_hosting.md)
-- [Wave 24: Native Backend Transition](implementation/wave24_native_backend_transition.md)
-- [Wave 25: Retirement of Go and C](implementation/wave25_retirement_of_go_and_c.md)
-- [Wave 26: Targets and Ecosystem](implementation/wave26_targets_and_ecosystem.md)
+- [Wave 19: Language Server](implementation/wave19_language_server.md)
+- [Wave 20: Stdlib Core](implementation/wave20_stdlib_core.md)
+- [Wave 21: Custom Allocators](implementation/wave21_custom_allocators.md)
+- [Wave 22: Stdlib Hosted](implementation/wave22_stdlib_hosted.md)
+- [Wave 23: Package Management](implementation/wave23_package_management.md)
+- [Wave 24: Stub Clearance Gate](implementation/wave24_stub_clearance_gate.md)
+- [Wave 25: Stage 2 and Self-Hosting](implementation/wave25_stage2_and_self_hosting.md)
+- [Wave 26: Native Backend Transition](implementation/wave26_native_backend_transition.md)
+- [Wave 27: Performance Gate](implementation/wave27_performance_gate.md)
+- [Wave 28: Retirement of Go and C](implementation/wave28_retirement_of_go_and_c.md)
+- [Wave 29: Targets and Native Expansion](implementation/wave29_targets_and_native_expansion.md)
+- [Wave 30: Ecosystem Documentation](implementation/wave30_ecosystem_documentation.md)
 
 ## Cross-cutting constraints
 
@@ -205,5 +225,12 @@ The following rules apply to every wave.
 - Every feature in the language reference is scheduled to a concrete wave
   (Rule 2.5). No `Wave TBD`, no "post-v1".
 - `tests/e2e/README.md` is updated whenever a proof program is added.
-- W22 Stub Clearance Gate and W23 Stage 2 and W24 Native Backend require
-  the Active stubs table to be empty at entry.
+- `tests/perf/README.md` is updated whenever a benchmark is added;
+  threshold changes are justified in commit messages (Rule 6.17 also
+  applies to perf regressions masked as routine).
+- Every compiler diagnostic carries a primary span, a one-line
+  explanation, and a suggestion where applicable (Rule 6.17).
+- W24 Stub Clearance Gate, W25 Stage 2, and W26 Native Backend all
+  require the Active stubs table to be empty at entry.
+- W27 Performance Gate must pass before W28 retires the bootstrap
+  language surface.

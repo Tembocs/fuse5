@@ -1,4 +1,4 @@
-# Wave 20: Custom Allocators
+# Wave 21: Custom Allocators
 
 > Part of the [Fuse implementation plan](../implementation-plan.md).
 
@@ -7,7 +7,7 @@ Goal: declare the `Allocator` trait, parameterize core collections over
 an allocator, and prove a user-defined `BumpAllocator` can back a
 collection.
 
-Entry criterion: W19 done. Phase 00 confirms no overdue stubs.
+Entry criterion: W20 done. Phase 00 confirms no overdue stubs.
 
 Exit criteria:
 
@@ -31,39 +31,39 @@ go test ./tests/... -run TestCollectionsInAllocator -v
 go test ./tests/e2e/... -run TestBumpAllocatorProof -v
 ```
 
-## Phase 00: Stub Audit [W20-P00-STUB-AUDIT]
+## Phase 00: Stub Audit [W21-P00-STUB-AUDIT]
 
-- Task 01: Allocator audit [W20-P00-T01-AUDIT]
-  Verify: `go run tools/checkstubs/main.go -wave W20 -phase P00`
+- Task 01: Allocator audit [W21-P00-T01-AUDIT]
+  Verify: `go run tools/checkstubs/main.go -wave W21 -phase P00`
 
-## Phase 01: Allocator Trait and Global Allocator [W20-P01-TRAIT]
+## Phase 01: Allocator Trait and Global Allocator [W21-P01-TRAIT]
 
-- Task 01: Declare `Allocator` trait [W20-P01-T01-TRAIT]
+- Task 01: Declare `Allocator` trait [W21-P01-T01-TRAIT]
   Verify: `fuse build stdlib/core/alloc/... && go test ./tests/... -run TestAllocatorTrait -v`
-- Task 02: Global allocator with runtime wrapper [W20-P01-T02-GLOBAL]
+- Task 02: Global allocator with runtime wrapper [W21-P01-T02-GLOBAL]
   DoD: `SystemAllocator` wraps `fuse_rt_alloc_*`; override mechanism
   documented.
   Verify: `go test ./tests/... -run TestGlobalAllocator -v`
 
-## Phase 02: Parameterize Collections [W20-P02-PARAMETERIZE]
+## Phase 02: Parameterize Collections [W21-P02-PARAMETERIZE]
 
-- Task 01: `Vec`/`HashMap`/`Box` take allocator param [W20-P02-T01-VEC]
+- Task 01: `Vec`/`HashMap`/`Box` take allocator param [W21-P02-T01-VEC]
   DoD: every allocation site routes through the provided allocator.
   Verify: `go test ./tests/... -run TestCollectionsInAllocator -v`
 
-## Phase 03: Allocator Proof Program [W20-P03-PROOF]
+## Phase 03: Allocator Proof Program [W21-P03-PROOF]
 
-- Task 01: `bump_allocator.fuse` [W20-P03-T01-PROOF]
+- Task 01: `bump_allocator.fuse` [W21-P03-T01-PROOF]
   DoD: a program defines a `BumpAllocator` backed by a stack buffer,
   allocates a `Vec[I32, BumpAllocator]`, pushes two values, sums them,
   returns the sum as the exit code. `arena.reset()` must be observable
   (alloc after reset returns original offset).
   Verify: `go test ./tests/e2e/... -run TestBumpAllocatorProof -v`
 
-## Wave Closure Phase [W20-PCL-WAVE-CLOSURE]
+## Wave Closure Phase [W21-PCL-WAVE-CLOSURE]
 
-- Task 01: Retire allocator stubs [W20-PCL-T01-RETIRE]
-  Verify: `go run tools/checkstubs/main.go -wave W20`
-- Task 02: WC020 entry [W20-PCL-T02-CLOSURE-LOG]
-  Verify: `grep "WC020" docs/learning-log.md`
+- Task 01: Retire allocator stubs [W21-PCL-T01-RETIRE]
+  Verify: `go run tools/checkstubs/main.go -wave W21`
+- Task 02: WC021 entry [W21-PCL-T02-CLOSURE-LOG]
+  Verify: `grep "WC021" docs/learning-log.md`
 
