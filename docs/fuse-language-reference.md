@@ -1690,20 +1690,46 @@ let result = add(3, 4);    // 7
 
 ### 15.2 Capture
 
-Closures implicitly capture variables from the enclosing scope. The capture
-mode follows the same ownership rules as explicit borrows and moves.
+Closures implicitly capture variables from the enclosing scope. By default
+the capture mode follows ordinary borrow/move rules: a read of an outer
+binding captures it by `ref` (or by copy if the type is `Copy`); a write
+captures it by `mutref`; a value consumed with an explicit `move x` or
+`owned x` inside the closure body is captured by ownership transfer.
 
 ```fuse
-let threshold = 10;
-let is_big = fn(n: I32) -> Bool { n > threshold };   // captures threshold by ref
+let threshold = 10;                                         // Copy
+let is_big = fn(n: I32) -> Bool { n > threshold };          // threshold captured by Copy
 
-let base = String.from("prefix");
+let base = String.from("prefix");                           // non-Copy
 let prepend = fn(s: ref String) -> String {
-    return base + s;    // captures base
+    return base + s;                                        // base captured by ref
 };
 ```
 
-### 15.3 Closures as arguments
+### 15.3 The `move` closure prefix
+
+A `move` prefix on a closure forces every outer binding the closure uses to
+be captured by ownership transfer, regardless of how the body references it.
+`move` turns the closure's environment struct from one that may hold borrow
+fields into one that holds only owned or `Copy` fields. Without `move`,
+captures follow the default rules of §15.2.
+
+```fuse
+let msg = String.from("hello");
+let f = move fn() -> USize { return msg.len(); };
+// msg has been moved into f; it is no longer accessible in the outer scope.
+
+let n = 42;                  // Copy
+let g = move fn() -> I32 { return n + 1; };
+// n is Copy, so `move` copies it into g; n remains usable out here.
+```
+
+`move` is the primary tool for producing an *escaping* closure (§15.5) —
+one that can be stored in a struct, returned from a function, or passed to
+`spawn`. It is the user-visible signal that the closure takes ownership
+of what it uses.
+
+### 15.4 Closures as arguments
 
 Functions accept closures through trait-bounded parameters.
 
@@ -1719,26 +1745,92 @@ fn filter[T](items: ref [T], pred: fn(ref T) -> Bool) -> [T] {
 let evens = filter(ref numbers, fn(n: ref I32) -> Bool { *n % 2 == 0 });
 ```
 
-### 15.4 Closures with `spawn`
+### 15.5 Closure escape discipline
 
-Closures used with `spawn` must capture by value (or by `owned` transfer) so
-they are self-contained.
+Every closure is classified, based on its environment struct, as either
+**escaping** or **non-escaping**.
+
+- A closure is **non-escaping** if its environment struct contains any
+  `ref T` or `mutref T` field at any nesting depth. A non-escaping
+  closure may be *called*, and it may be *passed as an argument* to a
+  function that uses it synchronously and does not store it, but it may
+  not be:
+  - stored in a struct, enum, or tuple field,
+  - returned from a function,
+  - boxed into `owned dyn Fn` / `owned dyn FnMut` / `owned dyn FnOnce`,
+  - passed to `spawn`, sent across a `Chan[T]`, or placed in a `Shared[T]`.
+
+  The restriction is enforced structurally: the escape check fails at
+  every use site listed above, with a diagnostic that names the specific
+  borrow field responsible and suggests `move` where applicable.
+
+- A closure is **escaping** if its environment struct contains only
+  owned or `Copy` fields. Escaping closures have no closure-level
+  restrictions beyond the ordinary ownership and `Send` rules of §14
+  and §47.
+
+The easiest way to turn a non-escaping closure into an escaping one is
+to prefix it with `move` (§15.3). A `move` closure captures by ownership
+transfer, producing an environment struct with no borrow fields.
+
+This discipline is the closure-level counterpart of §54's "no borrows in
+struct fields" rule. An environment struct that holds a borrow is still a
+struct; the same reason the language bans user-declared borrow fields
+applies to compiler-synthesized ones. The escape discipline keeps the
+compiler from having to invent lifetime variables to reason about closures
+that would otherwise outlive their captured borrows.
+
+### 15.6 Closures with `spawn`
+
+Closures passed to `spawn` must be *escaping* (§15.5) and must have a
+`Send` environment (§47). Because borrow types are never `Send` (§47.1),
+these two requirements together imply that a spawned closure must not
+capture by `ref` or `mutref` — it must either be `move`-prefixed, or use
+only `Copy` captures and explicit `move x` / `owned x` inside the body.
 
 ```fuse
 let msg = String.from("hello from thread");
-spawn fn() {
-    log(ref msg);
+spawn move fn() {
+    log(ref msg);                       // msg moved into the thread; not usable outside
 };
 ```
 
-### 15.5 Implementation contracts
+When a user writes `spawn fn() { use(x); }` without `move` and `x` is
+not `Copy`, the checker rejects the program with a diagnostic of the
+form:
+
+> spawned closure captures `x` by ref, but `ref T` is not `Send` (§47.1).
+> Suggestion: prefix the closure with `move` to capture `x` by value, or
+> wrap shared state in `Shared[T]` before spawning.
+
+Parallel iteration over a borrowed slice — the scoped-threads pattern —
+cannot be expressed with `spawn` alone in v1, because `spawn` detaches
+the thread from the caller's scope. v1 parallelism works by transferring
+ownership into threads (see the rewritten example in §39). A scoped
+`thread::scope` primitive, which would allow `ref`-capture with a
+guaranteed join-before-return, is a non-normative post-v1 extension.
+
+### 15.7 Implementation contracts
 
 #### Capture analysis
 
 Closure bodies must be scanned for references to outer variables before
-lowering begins. Captured variables are collected and become fields of a
-generated environment struct. The capture mode of each variable follows the
-same ownership rules as explicit borrows and moves.
+lowering begins. Each captured variable is classified as `Copy`, `ref`,
+`mutref`, or owned. The default classification is the tightest that
+satisfies the body's uses (a body that only reads captures by `ref`, a
+body that mutates captures by `mutref`, a body containing `move x` or
+`owned x` captures by ownership). A `move` prefix on the closure
+overrides the default and classifies every used outer binding as owned.
+The resulting capture set determines the environment struct's field
+types.
+
+#### Escape classification
+
+Immediately after capture analysis, each closure is classified as
+escaping or non-escaping per §15.5. This classification is metadata on
+the closure's HIR node and is consumed by every use-site check (storage,
+return, boxing, `spawn`). Escape classification is computed once and is
+not recomputed opportunistically downstream.
 
 #### Closure lifting to MIR
 
@@ -1900,30 +1992,37 @@ full handle semantics. Fuse does not use `async`/`await`.
 
 ```fuse
 // handle discarded: fire-and-forget
-spawn fn() {
+spawn move fn() {
     do_work();
 };
 
 // handle retained: join for result
-let handle: ThreadHandle[I32] = spawn fn() -> I32 { return compute(); };
+let handle: ThreadHandle[I32] = spawn move fn() -> I32 { return compute(); };
 let value = handle.join().unwrap();
 ```
 
+Closures passed to `spawn` must be `move`-prefixed (or capture only `Copy`
+values with explicit `move x` / `owned x` inside the body). See §15.6 for
+the full rule and the diagnostic that fires when `move` is missing.
+
 ### 17.2 Channels (`Chan[T]`)
 
-`Chan[T]` is the primary message-passing primitive between threads.
+`Chan[T]` is the primary message-passing primitive between threads. Both
+ends of the channel are reached through cheap handle clones; the channel
+itself is `Send` when `T: Send`.
 
 ```fuse
 import full.chan.Chan;
 
 let ch: Chan[I32] = Chan.new[I32]();
+let tx = ch.clone();                   // cheap handle clone for the sender
 
 // sender thread
-spawn fn() {
-    ch.send(42);
+spawn move fn() {
+    tx.send(42);
 };
 
-// receiver
+// receiver (main thread still holds `ch`)
 let value = ch.recv();
 ```
 
@@ -1938,15 +2037,17 @@ ch.close();              // signals no more sends; recv returns None after drain
 ### 17.4 Shared mutable state (`Shared[T]`)
 
 `Shared[T]` wraps a value with synchronization. Access requires acquiring the
-lock.
+lock. `Shared[T]` is `Send + Sync` when `T: Send`, and handles are cheaply
+cloned so multiple threads can share access.
 
 ```fuse
 import full.sync.Shared;
 
 let counter: Shared[I32] = Shared.new(0);
+let shared_for_thread = counter.clone();      // cheap handle clone
 
-spawn fn() {
-    let guard = counter.lock();
+spawn move fn() {
+    let guard = shared_for_thread.lock();
     *guard += 1;
 };    // guard released when dropped
 ```
@@ -3225,7 +3326,7 @@ result.
 import full.thread.ThreadHandle;
 
 // spawn returns a handle
-let handle: ThreadHandle[I32] = spawn fn() -> I32 {
+let handle: ThreadHandle[I32] = spawn move fn() -> I32 {
     return expensive_computation();
 };
 
@@ -3240,16 +3341,26 @@ match thread_result {
     Err(e) { log("thread panicked"); }
 }
 
-// parallel map pattern
-fn par_map[T, U](items: ref [T], f: fn(ref T) -> U) -> [U] {
+// parallel map pattern — ownership-transferring form
+//
+// `spawn` detaches from the caller's scope, so v1 parallelism over a
+// collection takes ownership of its input. Each thread owns one slot.
+// Borrowed-slice parallelism (Rayon-style) requires a future scoped
+// thread primitive — see §15.6 for the design note.
+fn par_map[T: Send, U: Send](
+    items: owned [T],
+    f: fn(owned T) -> U,
+) -> [U] {
     let handles: [ThreadHandle[U]] = items
-        .map(fn(item: ref T) -> ThreadHandle[U] {
-            spawn fn() -> U { return f(ref item); }
+        .into_iter()
+        .map(move fn(item: owned T) -> ThreadHandle[U] {
+            spawn move fn() -> U { return f(owned item); }
         })
         .collect();
 
     return handles
-        .map(fn(h: ThreadHandle[U]) -> U { h.join().unwrap() })
+        .into_iter()
+        .map(move fn(h: owned ThreadHandle[U]) -> U { h.join().unwrap() })
         .collect();
 }
 ```
@@ -3791,8 +3902,8 @@ pub trait Copy { }
 // types containing Ptr[T] are not automatically Send or Sync
 
 // spawn requires Send
-fn spawn_with[T: Send](value: T, f: fn(T)) -> ThreadHandle[()]  {
-    return spawn fn() { f(value); };
+fn spawn_with[T: Send](value: T, f: fn(owned T)) -> ThreadHandle[()]  {
+    return spawn move fn() { f(owned value); };
 }
 
 // Shared[T] requires T: Send + Sync
@@ -3805,7 +3916,7 @@ struct NonSendResource {
 
 // the compiler prevents this:
 // let h = NonSendResource { handle: get_handle() };
-// spawn fn() { use(h); };   // compile error: NonSendResource is not Send
+// spawn move fn() { use(h); };   // compile error: NonSendResource is not Send
 ```
 
 ### 47.1 Implementation contracts
@@ -4417,6 +4528,20 @@ A borrow is alive from its point of formation to the end of the innermost
 enclosing block. Borrows cannot be returned unless the returned borrow
 points into a parameter that was itself borrowed; this case is handled
 structurally by the ownership checker without explicit lifetime variables.
+
+#### Closure environment structs and the escape discipline
+
+The no-borrow-in-struct-field rule applies to user-declared structs.
+Compiler-synthesized closure environment structs may contain borrow
+fields when the closure captures outer bindings by `ref` or `mutref` —
+but a closure whose environment holds any borrow is classified as
+*non-escaping* and is denied every operation that would otherwise let
+the borrow outlive its owner (storage in a user struct, return from a
+function, boxing into `owned dyn Fn`, `spawn`, send over `Chan[T]`,
+placement in `Shared[T]`). The escape discipline is the closure-level
+counterpart of this section's rule; both follow the same underlying
+principle. See §15.5 for the full definition and §15.3 for the `move`
+prefix that promotes a closure to escaping by capturing by ownership.
 
 ---
 

@@ -59,9 +59,26 @@ go test ./tests/e2e/... -run TestConcurrencyRejections -v
 - Task 01: Spawn typing to `ThreadHandle[T]` [W07-P03-T01-SPAWN-TYPING]
   Verify: `go test ./compiler/check/... -run TestSpawnHandleTyping -v`
 - Task 02: Send bound on captured environment [W07-P03-T02-SPAWN-SEND]
+  DoD: spawn rejects any closure whose environment struct is not
+  `Send`. Because borrow types are never `Send` (reference §47.1), a
+  non-`move` closure that captures a non-`Copy` outer binding is
+  rejected. The diagnostic names the offending capture and suggests the
+  `move` closure prefix (reference §15.3) as the mechanical fix, per
+  Rule 6.17. Example diagnostic body: `spawned closure captures X by
+  ref, but ref T is not Send (§47.1). Suggestion: prefix the closure
+  with move to capture X by value, or wrap shared state in Shared[T]
+  before spawning.`
   Verify: `go test ./compiler/check/... -run TestSpawnSendBound -v`
 - Task 03: `Shared[T]` bounds [W07-P03-T03-SHARED-BOUND]
   Verify: `go test ./compiler/check/... -run TestSharedBounds -v`
+- Task 04: Non-escaping closures rejected at concurrency boundaries
+  [W07-P03-T04-ESCAPE-AT-SPAWN]
+  DoD: the spawn check composes with the W09-P01-T06 escape
+  classification: a non-escaping closure passed to `spawn`, sent over
+  `Chan[T]`, or placed in `Shared[T]` is rejected with the same
+  diagnostic shape as T02 above. This is a structural check; no
+  heuristics.
+  Verify: `go test ./compiler/check/... -run TestSpawnRejectsNonEscaping -v`
 
 ## Phase 04: Lock Ranking [W07-P04-RANKING]
 
@@ -71,8 +88,12 @@ go test ./tests/e2e/... -run TestConcurrencyRejections -v
 ## Phase 05: Concurrency Proof Program [W07-P05-PROOF]
 
 - Task 01: Rejection proof [W07-P05-T01-REJECTIONS]
-  DoD: checker proof file asserts several rejections fire with the
-  expected diagnostic (non-Send spawn, wrong-type send, double-lock rank).
+  DoD: checker proof file asserts that each of these rejections fires
+  with the expected diagnostic text: (a) spawn of a closure capturing
+  by `ref` without `move`, including the `move`-suggestion per Rule
+  6.17; (b) spawn of a non-`Send` owned type; (c) `Chan[Bool].send(42)`
+  element-type mismatch; (d) double-lock rank violation. Diagnostic
+  goldens are committed alongside the fixtures.
   Verify: `go test ./tests/e2e/... -run TestConcurrencyRejections -v`
 
 ## Wave Closure Phase [W07-PCL-WAVE-CLOSURE]

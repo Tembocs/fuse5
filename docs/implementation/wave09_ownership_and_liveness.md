@@ -22,12 +22,16 @@ Exit criteria:
   to overlapping memory
 - use-after-move rejected: moved locals and moved-from fields may not be
   read again on any path
+- closure escape classification enforced (reference §15.5): a closure
+  with a borrow in its environment struct is non-escaping and rejected
+  at every escape site (storage, return, boxing, `spawn`, `Chan[T]`,
+  `Shared[T]`)
 - drop metadata flows from checker to codegen
 - `InstrDrop` emits `TypeName_drop(&_lN);` for types with `Drop`
 - proof program: type with `Drop` impl demonstrates observable cleanup
 - rejection proofs: borrow-in-field, return-local-borrow, aliased-mutref,
-  and use-after-move each have a committed `.fuse` fixture that must fail
-  to compile with the declared diagnostic
+  use-after-move, and escaping-borrow-closure each have a committed
+  `.fuse` fixture that must fail to compile with the declared diagnostic
 
 Proof of completion:
 
@@ -38,6 +42,7 @@ go test ./compiler/liveness/... -run TestDestructionOnAllPaths -v
 go test ./compiler/liveness/... -run TestReturnBorrowRule -v
 go test ./compiler/liveness/... -run TestMutrefAliasing -v
 go test ./compiler/liveness/... -run TestUseAfterMove -v
+go test ./compiler/liveness/... -run TestClosureEscape -v
 go test ./compiler/codegen/... -run TestDestructorCallEmitted -v
 go test ./tests/e2e/... -run TestDropObservable -v
 go test ./tests/e2e/... -run TestBorrowRejections -v
@@ -74,6 +79,17 @@ go test ./tests/e2e/... -run TestBorrowRejections -v
   `move`, `owned`, or function-call move semantics is a compile error on
   every control-flow path that could observe the read.
   Verify: `go test ./compiler/liveness/... -run TestUseAfterMove -v`
+- Task 06: Closure escape enforcement [W09-P01-T06-CLOSURE-ESCAPE]
+  DoD: every closure is classified as escaping or non-escaping per
+  reference §15.5. A closure with any `ref T` or `mutref T` field in its
+  environment struct is non-escaping and is rejected at any use site
+  that would let it outlive the defining scope: assignment into a
+  struct/enum/tuple field, return from a function, boxing into `owned
+  dyn Fn` / `owned dyn FnMut` / `owned dyn FnOnce`, `spawn`, send over
+  `Chan[T]`, placement in `Shared[T]`. Each rejection names the specific
+  borrow field responsible and suggests `move` where applicable (per
+  Rule 6.17).
+  Verify: `go test ./compiler/liveness/... -run TestClosureEscape -v`
 
 ## Phase 02: Single Liveness Computation [W09-P02-LIVENESS]
 
@@ -101,12 +117,15 @@ go test ./tests/e2e/... -run TestBorrowRejections -v
 - Task 01: `drop_observable.fuse` [W09-P05-T01-PROOF]
   Verify: `go test ./tests/e2e/... -run TestDropObservable -v`
 - Task 02: Borrow rejection fixtures [W09-P05-T02-BORROW-REJECTIONS]
-  DoD: `tests/e2e/` contains four committed `.fuse` fixtures, each of which
+  DoD: `tests/e2e/` contains five committed `.fuse` fixtures, each of which
   must fail to compile with a specific named diagnostic:
   `reject_borrow_in_field.fuse`, `reject_return_local_borrow.fuse`,
-  `reject_aliased_mutref.fuse`, `reject_use_after_move.fuse`. The e2e
-  runner confirms each one fails and that the diagnostic text matches the
-  golden.
+  `reject_aliased_mutref.fuse`, `reject_use_after_move.fuse`, and
+  `reject_escaping_borrow_closure.fuse` (a closure with a `ref` capture
+  used in an escape position — assignment into a struct field, return
+  from a function, or passed to `spawn`). The e2e runner confirms each
+  one fails and that the diagnostic text matches the golden, including
+  the `move` suggestion where applicable per Rule 6.17.
   Verify: `go test ./tests/e2e/... -run TestBorrowRejections -v`
 
 ## Wave Closure Phase [W09-PCL-WAVE-CLOSURE]

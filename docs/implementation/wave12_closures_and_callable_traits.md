@@ -11,7 +11,14 @@ Entry criterion: W11 done. Phase 00 confirms no overdue stubs.
 Exit criteria:
 
 - capture analysis scans closure bodies for outer-variable references
-- environment struct type generated per closure
+- each captured variable classified as `Copy`, `ref`, `mutref`, or owned,
+  per reference §15.7; the default follows ordinary borrow/move rules
+- a `move` closure prefix reclassifies every used outer binding as owned
+  (reference §15.3)
+- environment struct type generated per closure; the struct field types
+  match the classified captures
+- each closure carries an escape classification (escaping / non-escaping)
+  on its HIR node, per reference §15.5, consumed by W09-P01-T06 enforcement
 - closure body lifted to standalone MIR function
 - closure expression emits struct init + function pointer pair
 - `Fn`/`FnMut`/`FnOnce` declared as intrinsic traits; stdlib core re-exports
@@ -24,6 +31,8 @@ Proof of completion:
 
 ```
 go test ./compiler/lower/... -run TestCaptureAnalysis -v
+go test ./compiler/lower/... -run TestMoveClosurePrefix -v
+go test ./compiler/lower/... -run TestEscapeClassification -v
 go test ./compiler/lower/... -run TestClosureLifting -v
 go test ./compiler/lower/... -run TestClosureConstruction -v
 go test ./compiler/check/... -run TestCallableAutoImpl -v
@@ -38,10 +47,27 @@ go test ./tests/e2e/... -run TestClosureCaptureRuns -v
 ## Phase 01: Capture and Lift [W12-P01-CAPTURE-LIFT]
 
 - Task 01: Capture analysis [W12-P01-T01-CAPTURE]
+  DoD: for every closure, scan the body for references to outer
+  bindings and classify each as `Copy`, `ref`, `mutref`, or owned using
+  the tightest classification that satisfies the body's uses (reads →
+  `ref` or `Copy`; writes → `mutref`; `move x` / `owned x` inside the
+  body → owned). Classifications are recorded on the closure HIR node.
   Verify: `go test ./compiler/lower/... -run TestCaptureAnalysis -v`
-- Task 02: Environment struct + lifted body [W12-P01-T02-LIFT]
+- Task 02: `move` closure prefix [W12-P01-T02-MOVE-PREFIX]
+  DoD: a `move` prefix on a closure overrides per-binding inference and
+  reclassifies every used outer binding as owned. The environment
+  struct field types and outer-scope ownership effects reflect the
+  override (reference §15.3).
+  Verify: `go test ./compiler/lower/... -run TestMoveClosurePrefix -v`
+- Task 03: Escape classification [W12-P01-T03-ESCAPE-CLASS]
+  DoD: each closure's HIR node carries an `escape_class` metadata field
+  computed from its environment struct (reference §15.5). A struct
+  containing any `ref T` / `mutref T` field → non-escaping; otherwise →
+  escaping. This metadata is what W09-P01-T06 consumes at use sites.
+  Verify: `go test ./compiler/lower/... -run TestEscapeClassification -v`
+- Task 04: Environment struct + lifted body [W12-P01-T04-LIFT]
   Verify: `go test ./compiler/lower/... -run TestClosureLifting -v`
-- Task 03: Closure construction [W12-P01-T03-CONSTRUCT]
+- Task 05: Closure construction [W12-P01-T05-CONSTRUCT]
   Verify: `go test ./compiler/lower/... -run TestClosureConstruction -v`
 
 ## Phase 02: Callable Traits [W12-P02-CALLABLE]
