@@ -1,6 +1,6 @@
 # Fuse Repository Layout
 
-> Status: normative for the next production attempt of Fuse (`fuse4`).
+> Status: normative for Fuse.
 >
 > This document defines the physical structure of the future repository. If the
 > repository layout diverges from this document, the layout is wrong or the
@@ -29,7 +29,7 @@
 The future repository is organized as follows.
 
 ```text
-fuse4/
+fuse/
 ├── cmd/
 │   └── fuse/
 ├── compiler/
@@ -97,38 +97,84 @@ to this document and the implementation plan.
 ### `STUBS.md`
 
 `STUBS.md` is a normative root-level file that tracks every active stub in the
-codebase. A stub is any compiler feature that parses and may type-check but is
-not fully lowered, codegenned, or otherwise operational. Every stub must have an
-entry in this file; every entry must correspond to a real stub in the code.
+codebase and an append-only history of stub lifecycle events. A stub is any
+compiler feature that parses and may type-check but is not fully lowered,
+codegenned, or otherwise operational. Every stub must have an entry in the
+Active stubs table; every entry must correspond to a real stub in the code.
 
-The format of each entry is:
+`STUBS.md` has two sections. Both are required.
+
+### Section 1 — Active stubs
+
+A table of every currently live stub:
 
 ```markdown
 ## Active stubs
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Closure lowering | compiler/lower/lower.go:214 | returns constUnit() | "closures are not yet implemented" | W07-P06 |
-| ? operator | compiler/lower/lower.go:389 | returns lowerExpr(n.Expr) | "error propagation not yet implemented" | W07-P05 |
+| Closure lowering | compiler/lower/lower.go:214 | returns constUnit() | "closures are not yet implemented" | W12 |
+| ? operator | compiler/lower/lower.go:389 | returns lowerExpr(n.Expr) | "error propagation not yet implemented" | W11 |
 ```
 
-Rules for `STUBS.md`:
+### Section 2 — Stub history
+
+An append-only log of stub creation, retirement, and reschedule events,
+organized by wave. Each wave closure appends a block in this form:
+
+```markdown
+## Stub history
+
+### W05 — Minimal End-to-End Spine
+
+Added:
+- Closure lowering (compiler/lower/lower.go:214) — emits "closures are not
+  yet implemented" — retires W12
+- ? operator (compiler/lower/lower.go:389) — emits "error propagation not
+  yet implemented" — retires W11
+
+Retired: (none this wave)
+
+Rescheduled: (none this wave)
+
+### W11 — Error Propagation
+
+Added: (none this wave)
+
+Retired:
+- ? operator (compiler/lower/lower.go:389 — now fully lowered) —
+  confirmed by tests/e2e/error_propagation.fuse (exits 43)
+
+Rescheduled: (none this wave)
+```
+
+The history section is never edited in place. Entries are appended at wave
+closure and never retroactively modified.
+
+### Rules for `STUBS.md`
 
 - Every stub must emit the diagnostic listed in the table (Rule 6.9). If the
   code does not emit this diagnostic, the entry is wrong and must be corrected.
+- Every stub must name a concrete retiring wave at creation. `TBD` and vague
+  labels are forbidden.
 - A wave is not complete until it removes every stub it was scheduled to retire
   and updates this file accordingly (Rule 6.13).
-- A wave that introduces new stubs must add them to this table with a diagnostic
-  and a retiring wave before the wave is marked complete.
-- CI must verify that every stub in the table emits its declared diagnostic when
-  the corresponding language feature is used. A stub with a wrong diagnostic
-  is a CI failure.
-- When the table is empty, `STUBS.md` must say so explicitly. An empty table is
-  a meaningful state that means the compiler has no silently broken features.
+- A wave that introduces new stubs must add them to the Active stubs table
+  with a diagnostic and a retiring wave before the wave is marked complete,
+  and must record the creation in the stub history log (Rule 6.16).
+- Phase 00 of every wave must check for overdue stubs and block wave entry if
+  any are found (Rule 6.15).
+- CI must verify that every stub in the Active stubs table emits its declared
+  diagnostic when the corresponding language feature is used. A stub with a
+  wrong diagnostic is a CI failure.
+- When the Active stubs table is empty, `STUBS.md` must say so explicitly. An
+  empty table is a meaningful state that means the compiler has no silently
+  broken features.
 
 `STUBS.md` is populated starting from Wave 00. At that point the entire
-compiler is unimplemented, so the initial entries may cover all language features
-at a coarse granularity, to be refined as waves progress.
+compiler is unimplemented, so the initial entries may cover all language
+features at a coarse granularity, to be refined as waves progress. The stub
+history starts empty and accumulates across waves.
 
 ### `go.mod`
 
@@ -411,9 +457,10 @@ The format of each entry in `tests/e2e/README.md` is:
 ```markdown
 | Program | Introduced | Feature | Expected output |
 |---|---|---|---|
-| hello_exit.fuse | W09 | basic binary output | exit code 0 |
-| identity_generic.fuse | W17-P05 | generic functions | exit code 42 |
-| option_match.fuse | W17-P08 | Option with pattern matching | exit code 42 |
+| hello_exit.fuse | W05-P05 | minimal end-to-end spine | exit code 0 |
+| identity_generic.fuse | W08-P06 | generic functions | exit code 42 |
+| match_enum_dispatch.fuse | W10-P04 | enum match dispatch | exit code 2 |
+| error_propagation.fuse | W11-P03 | error propagation with `?` | exit code 43 |
 ```
 
 A wave is not complete until its proof programs are listed in this file and CI
@@ -464,7 +511,7 @@ documentation, not when it is compiler logic in disguise.
 
 Required files:
 
-- `language-guide.md`
+- `fuse-language-reference.md`
 - `implementation-plan.md`
 - `repository-layout.md`
 - `rules.md`
@@ -472,8 +519,8 @@ Required files:
 
 Optional supporting directories:
 
-- `adr/` for architecture decisions that cannot live in the language guide or
-    implementation plan
+- `adr/` for architecture decisions that cannot live in the language reference
+    or implementation plan
 
 The project does not use free-form status documents as normative inputs. The
 five foundational files above remain the source of truth.

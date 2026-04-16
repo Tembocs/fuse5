@@ -48,7 +48,7 @@ disagree, the documents are the place to start.
 
 | Document | Purpose |
 |---|---|
-| `docs/language-guide.md` | Language specification and implementation contracts |
+| `docs/fuse-language-reference.md` | Language specification and implementation contracts |
 | `docs/implementation-plan.md` | Build plan from bootstrap to self-hosting |
 | `docs/repository-layout.md` | Repository structure and placement rules |
 | `docs/rules.md` | Contributor and agent discipline rules |
@@ -76,7 +76,7 @@ If you are approaching the project for the first time:
    actually done rather than merely claimed.
 2. Read `docs/implementation-plan.md` — it describes where the project is and
    what each wave is trying to accomplish.
-3. Read `docs/language-guide.md` — it is the normative language specification.
+3. Read `docs/fuse-language-reference.md` — it is the normative language specification.
 4. Check `STUBS.md` — it tells you what the compiler cannot do yet and what
    diagnostic it emits when you try.
 

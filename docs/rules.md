@@ -1,15 +1,15 @@
 # Fuse Project Rules
 
-> Status: normative for the next production attempt of Fuse (`fuse4`).
+> Status: normative for Fuse.
 >
 > This document is the canonical rule set for contributors and AI agents. It is
 > intentionally dense. Every rule exists because violating it either damaged the
-> architecture or made debugging materially harder in the previous attempt.
+> architecture or made debugging materially harder in a previous attempt.
 
 ## Table of contents
 
 1. Quickstart for contributors and AI agents
-2. Language guide precedence
+2. Language reference precedence
 3. Compiler architecture invariants
 4. Bug policy
 5. Stdlib policy
@@ -27,7 +27,7 @@
 
 Before writing code in this repository, a contributor or AI agent MUST:
 
-1. Read `docs/language-guide.md`.
+1. Read `docs/fuse-language-reference.md`.
 2. Read `docs/implementation-plan.md` and locate the current wave and phase.
 3. Read `docs/repository-layout.md`.
 4. Read `docs/learning-log.md`, especially recent entries.
@@ -53,39 +53,46 @@ Before marking a wave complete, a contributor or AI agent MUST:
 3. Append a wave closure entry (WCxxx) to the learning log.
 4. Confirm CI is green on the full test suite, not just the wave's local tests.
 
-## 2. Language guide precedence
+## 2. Language reference precedence
 
-### Rule 2.1 — The guide precedes implementation.
+### Rule 2.1 — The reference precedes implementation.
 
-No language feature may be implemented before it appears in the language guide.
+No language feature may be implemented before it appears in
+`docs/fuse-language-reference.md`.
 
-### Rule 2.2 — The guide is normative.
+### Rule 2.2 — The reference is normative.
 
-If the compiler and the guide disagree, the compiler is wrong unless the guide is
-explicitly updated first.
+If the compiler and the reference disagree, the compiler is wrong unless the
+reference is explicitly updated first.
 
 ### Rule 2.3 — Silence means absence.
 
-If the guide does not specify a feature or behavior, that feature does not exist.
+If the reference does not specify a feature or behavior, that feature does not
+exist.
 
 ### Rule 2.4 — Implementation contracts are mandatory.
 
 Any language feature that is architecturally sensitive must include an
-implementation contract in the guide. Backend-critical semantics must not be left
-to implication.
+implementation contract in the reference. Backend-critical semantics must not
+be left to implication.
 
 ### Rule 2.5 — Feature sections carry implementation status.
 
-Every feature section in the language guide carries an explicit status tag:
+Every feature section in the language reference carries an explicit status tag:
 
 - `SPECIFIED — Wxx`: specified in this document, scheduled for the named wave.
 - `DONE — Wxx`: implemented, proof program exists in `tests/e2e/`, CI passes.
 - `STUB — emits: "..."`: partially wired but not fully lowered; the compiler
   must emit the named diagnostic when this feature is used.
 
-A section without a status tag is a documentation defect. A section tagged DONE
-must have a corresponding e2e proof program. A section tagged STUB must have a
-corresponding entry in `STUBS.md`.
+A section without a status tag is a documentation defect. A section tagged
+DONE must have a corresponding e2e proof program. A section tagged STUB must
+have a corresponding entry in `STUBS.md`.
+
+There is no `SPECIFIED — Wave TBD` or `SPECIFIED — Post-V1` status. Every
+feature in the language reference is scheduled to a concrete wave in
+`docs/implementation-plan.md`. If a feature does not fit any scheduled wave,
+the plan must be revised to add a wave, not the feature deferred.
 
 ## 3. Compiler architecture invariants
 
@@ -286,6 +293,38 @@ stubs retired, any stubs introduced, what was harder than planned, and what the
 next wave must know. An agent that cannot fill this entry honestly has not
 completed the wave.
 
+### Rule 6.15 — Overdue stubs block wave entry.
+
+Phase 00 of every wave must inspect `STUBS.md` for overdue rows. A stub is
+overdue when its `Retiring wave` column names a wave less than or equal to
+the current wave and the stub has not yet been retired. If any overdue stub
+exists, the wave cannot begin until every overdue stub is either retired or
+the plan is explicitly revised to reschedule it, with the reschedule reason
+recorded in the stub history log (Rule 6.16).
+
+An agent that begins a wave while overdue stubs remain is in violation
+regardless of the wave's eventual outcome. "I'll clean those up at the end"
+is not acceptable — overdue stubs have already proved that deferred cleanup
+does not happen.
+
+### Rule 6.16 — STUBS.md carries an append-only stub history log.
+
+`STUBS.md` contains two sections:
+
+1. **Active stubs** — the current table of live stubs (Rule 6.13).
+2. **Stub history** — an append-only log, organized by wave, of every stub
+   creation, retirement, or reschedule event during the project's life.
+
+Every wave closure must append a section to the history log naming the stubs
+it added, the stubs it retired (with the proof program or test that confirmed
+retirement), and any stubs it rescheduled (with the reason). The history log
+is never edited in place. A stub that appears and disappears from the active
+table without a corresponding history entry is a violation.
+
+The stub history log is the project's audit trail for stub lifecycle: any
+reader can answer "when was this stub introduced?", "when was it retired?",
+and "what evidence confirmed its retirement?" from the log alone.
+
 ## 7. Determinism rules
 
 ### Rule 7.1 — Same input, same bytes.
@@ -420,6 +459,8 @@ explicitly.
 - marking a wave done without CI-passing proof programs in `tests/e2e/`
 - marking a wave done without a WCxxx learning-log entry
 - leaving STUBS.md stale at wave boundaries
+- beginning a wave while any prior wave's stubs are overdue
+- retiring a stub without a corresponding stub history log entry
 
 ## 14. AI agent behavior
 
@@ -430,7 +471,7 @@ An AI agent working on this repository MUST:
 - prefer root-cause fixes over local patches
 - avoid destructive actions on unrelated user work
 - update tests and the learning log when required
-- treat the language guide and implementation plan as the source of truth
+- treat the language reference and implementation plan as the source of truth
 - preserve the bootstrap model until the plan explicitly retires it
 
 An AI agent working on this repository MUST also, for every task:

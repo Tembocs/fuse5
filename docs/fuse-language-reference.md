@@ -1,9 +1,35 @@
 # Fuse Language Reference
 
-> This document covers every language feature as a short explanation followed
-> by a Fuse source snippet. It is intended as a reviewable reference, not a
-> tutorial. If the implementation and this document disagree, this document is
-> the starting point for resolving the conflict.
+> Status: normative for Fuse.
+>
+> This document is the specification of the Fuse language. It is written for
+> two audiences at once:
+>
+> - users, who need to understand how to write correct Fuse programs
+> - implementers, who must be able to build a correct compiler from this
+>   document alone
+>
+> Every section that defines a language feature includes an implementation
+> contract where the feature has behavior that is not deducible from surface
+> syntax alone. If an implementation contract is ambiguous, the document is
+> defective.
+>
+> Every feature section carries an implementation status tag:
+>
+> - `SPECIFIED — Wxx`: specified here, implementation scheduled for the named
+>   wave. Not yet implemented.
+> - `DONE — Wxx`: implemented, proof program exists in `tests/e2e/`, CI passes.
+> - `STUB — emits: "..."`: partially wired; the compiler emits the named
+>   diagnostic when this feature is used. Entry exists in STUBS.md.
+>
+> Every feature is scheduled to a concrete wave. "TBD" is not a status
+> (Rule 2.5).
+>
+> Every code example that demonstrates a complete program includes its expected
+> output. These examples are the source of truth for the e2e test suite and
+> must fail if the feature is stubbed.
+>
+> Fuse v1 is frozen. Features not described in this document do not exist.
 
 ## Splitting recommendation
 
@@ -35,6 +61,8 @@ as a natural landing point after the full language is introduced.
 ---
 
 ## 1. Lexical Basics
+
+> Implementation status: SPECIFIED — W01
 
 ### 1.1 Source encoding
 
@@ -131,9 +159,49 @@ unsafe  spawn  chan  import  as  mod  use  type  const  static
 extern  break  continue  where  Self  self  true  false  None  Some
 ```
 
+### 1.10 Implementation contracts
+
+#### Raw string recognition
+
+A raw string is recognized only when the lexer matches the full prefix pattern
+`r#*"` and the corresponding closing `"#*` sequence exists. The lexer must not
+enter raw-string mode on `r` followed by `#` alone.
+
+`r#abc` must tokenize as:
+
+```text
+IDENT("r")
+#
+IDENT("abc")
+```
+
+#### `?.` longest-match rule
+
+The lexer emits `?.` as one token. It is not `?` followed by `.`. The parser
+must interpret `expr?.field` as optional chaining, not as postfix `?` applied
+to `expr` followed by field access on the result.
+
+#### BOM rejection
+
+A UTF-8 byte-order mark at the start of a source file is a lexical error.
+The lexer must emit a diagnostic and refuse to tokenize the file. Silent BOM
+stripping is forbidden because it hides encoding drift across tools.
+
+#### Literal normalization
+
+Literal text must be normalized at the HIR-to-MIR boundary.
+
+- Integer suffixes are stripped before MIR constant emission.
+- String literal payloads are stored without their surrounding quote characters.
+
+The generated C must never contain raw Fuse literal spellings such as
+`INT32_C(64usize)` or doubled string quotes such as `""NaN""`.
+
 ---
 
 ## 2. Primitive Types
+
+> Implementation status: SPECIFIED — W04 (TypeTable), W06 (type checking)
 
 ### 2.1 Integer types
 
@@ -222,9 +290,36 @@ fn example(x: I32) -> I32 {
 }
 ```
 
+### 2.8 Implementation contracts
+
+#### Nominal type identity
+
+Two nominal types are the same type if and only if they share:
+
+- the same declared name, and
+- the same defining symbol or defining module identity
+
+Name-only equality is invalid in a multi-module compiler. Two types called
+`Expr` from different modules are distinct types.
+
+#### Primitive method registration
+
+The checker must register the primitive method surface (see §24) before any
+function body checking begins. Primitive method lookup must not depend on
+user-declared impls.
+
+#### `Never` subtyping
+
+`Never` (`!`) is a subtype of every type. A diverging expression may appear in
+any position that expects a value of any type; the compiler must accept the
+expression without inventing a concrete fallback value. See §6 for the
+divergence control-flow contract.
+
 ---
 
 ## 3. Compound Types
+
+> Implementation status: SPECIFIED — W04 (TypeTable), W06 (type checking)
 
 ### 3.1 Tuples
 
@@ -282,9 +377,25 @@ unsafe {
 }
 ```
 
+### 3.5 Implementation contracts
+
+#### Tuple numeric fields
+
+When the receiver is a tuple type, a decimal field name such as `0` or `1` is
+an index into the tuple, not a struct field name. This is the only legal tuple
+field access form.
+
+#### Raw pointers are not borrows
+
+`Ptr[T]` does not participate in ownership analysis and is not implicitly
+dereferenced. The backend must track `Ptr[T]` values in a separate pointer
+category from borrow pointers (see backend representation contracts).
+
 ---
 
 ## 4. Variables and Bindings
+
+> Implementation status: SPECIFIED — W05 (minimal `let`), W06 (full type checking)
 
 ### 4.1 Immutable binding (`let`)
 
@@ -343,6 +454,8 @@ let t = move s;       // s is moved into t; s is no longer accessible
 ---
 
 ## 5. Operators
+
+> Implementation status: SPECIFIED — W06 (type checking), W15 (lowering)
 
 ### 5.1 Arithmetic
 
@@ -429,9 +542,32 @@ fn read_config() -> Result[Config, IoError] {
 }
 ```
 
+### 5.8 Implementation contracts
+
+#### Numeric widening
+
+Binary operators between two numeric types in the same family are permitted
+when the wider type can represent all values of the narrower. For example,
+`I32 == ISize` is legal. Bitwise operators require matching signedness and
+width.
+
+#### Equality lowering behavioral contract
+
+The lowerer must not emit raw backend equality for every type. For non-scalar
+types, equality must lower through the type's equality semantics rather than
+a plain C `==` or `!=`. A lowering that emits `==` for a struct type is a bug.
+
+#### Optional chaining lowering
+
+`expr?.field` lowers to a conditional read that short-circuits on absence or
+error according to the operand type. `?.` must not lower as `?` applied to
+`expr` followed by field access on the result.
+
 ---
 
 ## 6. Control Flow
+
+> Implementation status: SPECIFIED — W15 (lowering)
 
 ### 6.1 `if` / `else if` / `else`
 
@@ -525,9 +661,26 @@ fn find(haystack: ref [I32], needle: I32) -> Option[I32] {
 }
 ```
 
+### 6.7 Implementation contracts
+
+#### Sealed control-flow blocks
+
+Lowering of `return`, `break`, and `continue` must seal the current basic
+block. Later control-flow construction must not treat the sealed block as a
+reachable fallthrough predecessor.
+
+#### Divergence is structural
+
+After a diverging call, there is no continuing control-flow path. MIR must
+model that structurally. The code generator must not synthesize fake
+temporaries or fallback values that assume execution continues.
+
 ---
 
 ## 7. Pattern Matching
+
+> Implementation status: SPECIFIED — W10 (match lowering), W08 (match on
+> generic enum specializations)
 
 `match` is an expression. Arms are tested in source order. The compiler
 enforces exhaustiveness.
@@ -633,9 +786,60 @@ match n {
 }
 ```
 
+### 7.9 Implementation contracts
+
+#### Structured patterns at HIR
+
+`MatchArm` must carry structured `Pattern` nodes (`LiteralPat`, `BindPat`,
+`ConstructorPat`, `WildcardPat`, `OrPat`, `RangePat`, `AtBindPat`). Storing
+patterns as a text description at HIR is forbidden because it makes real
+dispatch impossible at MIR.
+
+#### Match behavioral contract
+
+Given a `match` expression with N arms over an enum with discriminants:
+
+- the generated code must evaluate the discriminant tag exactly once
+- each arm must be tested in source order
+- only the matching arm's body executes
+- an arm containing a binding pattern must extract the payload value before
+  entering the arm's body
+- a match with N arms produces at least N-1 conditional branches in MIR;
+  wildcard arms produce unconditional fallthrough jumps
+
+A lowering that unconditionally jumps to the first arm is not a correct
+implementation of `match`.
+
+#### Exhaustiveness checking
+
+The checker must verify that a `match` on a finite domain (enum, bool) covers
+every case or contains a wildcard arm. Non-exhaustive `match` on such a domain
+is a compile error. Unreachable arms (shadowed by an earlier wildcard or
+equivalent) must produce a diagnostic.
+
+#### Match proof program
+
+```fuse
+enum Color { Red, Green, Blue }
+
+fn main() -> I32 {
+    let c = Color.Green;
+    match c {
+        Red   { return 1; }
+        Green { return 2; }
+        Blue  { return 3; }
+    }
+}
+```
+
+Expected: exits with code 2.
+E2E fixture: `tests/e2e/match_enum_dispatch.fuse`
+
 ---
 
 ## 8. Functions
+
+> Implementation status: SPECIFIED — W06 (type checking), W15 (lowering)
 
 ### 8.1 Basic declaration
 
@@ -714,9 +918,33 @@ pub fn panic(msg: ref String) -> Never {
 }
 ```
 
+### 8.7 Implementation contracts
+
+#### Function type registration pre-pass
+
+Every function declaration node, including impl methods and extern
+declarations, must receive its function type before any function body is
+checked.
+
+The checker therefore requires two passes:
+
+- Pass 1: register all function types
+- Pass 2: check all function bodies
+
+If impl methods only receive their type during body checking, their metadata
+remains `Unknown` during lowering and code generation, which corrupts the
+backend pipeline.
+
+#### No function-type gaps after checking
+
+After successful checking, no function declaration in checked HIR may retain
+an unknown function type. This is a hard invariant, not a best-effort rule.
+
 ---
 
 ## 9. Methods and Impl Blocks
+
+> Implementation status: SPECIFIED — W06 (type checking), W15 (lowering)
 
 ### 9.1 Inherent methods
 
@@ -770,9 +998,31 @@ items.push(1);    // push takes mutref self; no explicit mutref needed
 items.push(2);
 ```
 
+### 9.4 Implementation contracts
+
+#### Field access versus method-call disambiguation
+
+The surface syntax `obj.name` is ambiguous between a data field read and a
+method reference. The lowerer must disambiguate using position.
+
+- If `obj.name` is the direct callee of a call expression, treat it as a
+  method reference and emit a method call with `obj` as the first argument.
+- Otherwise, treat it as a field access and emit the appropriate
+  field-address or field-read logic.
+
+Lowering `self.len()` as a field access is a backend bug.
+
+#### Implicit `mutref` on mutable receivers
+
+When a method receiver is declared as `mutref self`, the call site does not
+need to spell `mutref` explicitly if the receiver is an existing mutable
+binding (`var` or a `mutref` parameter).
+
 ---
 
 ## 10. Structs
+
+> Implementation status: SPECIFIED — W06 (type checking), W15 (lowering)
 
 ### 10.1 Plain struct
 
@@ -840,9 +1090,28 @@ let red2 = Color { r: 255, g: 0, b: 0 };
 let same = red == red2;    // true; derived equality
 ```
 
+### 10.7 Implementation contracts
+
+#### Struct literal disambiguation
+
+`IDENT {` is not automatically a struct literal. It is a struct literal only
+if the brace body syntactically looks like a field list, either empty or
+beginning with `IDENT :`. Otherwise the identifier remains an expression and
+the `{` opens the surrounding block.
+
+#### `@value` auto-derivation
+
+The checker must register auto-derived trait implementations for every
+`@value` struct before body checking begins. If any field type does not
+implement the required trait (equality, hashing, copy, formatting), the
+`@value` annotation is a compile error.
+
 ---
 
 ## 11. Enums
+
+> Implementation status: SPECIFIED — W06 (type checking), W15 (lowering),
+> W08 (generic enum layouts)
 
 ### 11.1 Unit variants
 
@@ -898,9 +1167,49 @@ match message {
 }
 ```
 
+### 11.6 Implementation contracts
+
+#### Enum variant hoisting
+
+Enum variants are hoisted into the enclosing module namespace. The resolver
+must detect conflicts between variants introduced by different enums in the
+same module. Qualified access (`EnumName.Variant`) remains valid even when no
+conflict exists.
+
+#### Qualified enum variant resolution
+
+The resolver must support `EnumName.Variant` in expression and pattern
+position. Enum variants are hoisted to module scope, so qualified access is
+required to make non-trivial code unambiguous.
+
+#### Unit erasure is total
+
+The unit type `()` has no runtime representation. If it appears in fields,
+variant payloads, parameters, arguments, pattern bindings, or function
+pointer typedefs, it is erased at every one of those sites. Partial erasure
+is not allowed.
+
+#### Enum layout behavioral contract
+
+For a non-generic enum, the generated C struct must contain:
+
+- an integer `_tag` field whose value uniquely identifies each variant
+- payload fields for each variant that carries data
+
+For a generic enum `E[T]`, each concrete specialization `E[I32]`, `E[Bool]`,
+etc. must produce a distinct C struct with payload fields typed to the
+concrete type argument. Unspecialized generic enum definitions must not be
+emitted.
+
+A wave that claims enum construction and destructuring work must include a
+proof program that constructs a variant, matches on it, extracts the payload,
+and returns a value that proves the correct arm executed.
+
 ---
 
 ## 12. Traits
+
+> Implementation status: SPECIFIED — W06 (trait resolution)
 
 ### 12.1 Trait declaration
 
@@ -989,9 +1298,37 @@ impl Clone for Point {
 }
 ```
 
+### 12.7 Implementation contracts
+
+#### Bound-chain method lookup
+
+When a receiver is a type parameter with trait bounds, method lookup must
+search:
+
+1. the directly declared trait bounds
+2. the supertraits of those bounds recursively
+
+This is required so that a type parameter bounded by `Hashable` can resolve
+methods declared on `Equatable` when `Hashable: Equatable`.
+
+#### Trait parameter ABI casts
+
+When a trait type appears in a parameter position, the backend may need to
+cast the concrete pointer type to the trait-representation pointer type at
+the call site. Omitting this cast is a backend ABI bug.
+
+#### Coherence and orphan rules
+
+An `impl` of a trait `T` for a type `U` is only permitted in a module that
+owns either `T` or `U`. Two overlapping impls for the same `(T, U)` pair are
+a compile error. This rule prevents incoherent method resolution across
+crates and modules.
+
 ---
 
 ## 13. Generics
+
+> Implementation status: SPECIFIED — W08
 
 ### 13.1 Generic functions
 
@@ -1114,9 +1451,94 @@ let a = wrap[I32](1);
 let b = wrap[Bool](true);
 ```
 
+### 13.10 Implementation contracts
+
+#### Valid specialization requires complete substitution
+
+A specialization is valid if and only if every required type parameter has
+been substituted with a concrete type. Required parameters include:
+
+- the generic parameters declared by the function
+- the generic parameters declared by its enclosing impl target, if any
+
+Partial specialization must be rejected.
+
+#### Recursive concreteness
+
+A type is concrete only if it contains no unresolved type parameters anywhere
+in its structure. Concreteness is recursive. `Option[T]` with `T` unresolved
+is not concrete; `Option[I32]` is.
+
+#### Specialization names include all type arguments
+
+Mangled specialization names must distinguish all concrete type arguments.
+`Option[ExprId]` and `Option[StmtId]` must not collide.
+
+#### Only concrete generic instantiations are emitted
+
+The backend emits only concrete instantiations. Unresolved generic types
+must be filtered out before type emission.
+
+#### Unresolved types are hard errors before codegen
+
+If any MIR type reaching codegen is unresolved or unknown, the compiler must
+emit a diagnostic and abort code generation. Substituting `Unknown` or `int`
+is not allowed.
+
+#### Contextual inference from expected type
+
+When explicit type arguments are absent, generic arguments are inferred from:
+
+1. value argument types
+2. the expected result type from the surrounding expression context
+
+`List.new()` in a field typed `List[Expr]` must infer `Expr` from context.
+
+#### Explicit type arguments on zero-argument generic calls
+
+Calls such as `size_of[T]()` and `marker[Int]()` carry type information even
+when they have no value arguments. The monomorphizer must receive explicit
+callee type arguments directly; a value-argument-only inference path is
+incomplete.
+
+#### Generic compilation behavioral contract
+
+Given `fn identity[T](x: T) -> T { return x; }` and a call
+`identity[I32](42)`:
+
+- the generated C must contain a function named `Fuse_identity__I32` (or a
+  deterministic equivalent) that takes `int32_t` and returns `int32_t`
+- `main` must call `Fuse_identity__I32(42)`, not `identity` or any generic
+  form
+- calling `identity[Bool](true)` must produce a distinct function
+  `Fuse_identity__Bool`
+- the two specializations must not share generated code
+
+#### Generic proof programs
+
+```fuse
+// tests/e2e/identity_generic.fuse
+fn identity[T](x: T) -> T { return x; }
+fn main() -> I32 { return identity[I32](42); }
+// expected: exit code 42
+```
+
+```fuse
+// tests/e2e/multiple_instantiations.fuse
+fn first[T](a: T, b: T) -> T { return a; }
+fn main() -> I32 {
+    let x = first[I32](10, 20);
+    let y = first[I32](3, 7);
+    return x + y;
+}
+// expected: exit code 13
+```
+
 ---
 
 ## 14. Ownership and Borrowing
+
+> Implementation status: SPECIFIED — W09
 
 ### 14.1 Value semantics
 
@@ -1211,9 +1633,50 @@ impl Drop for FileHandle {
 }
 ```
 
+### 14.8 Implementation contracts
+
+#### Borrow lowering rule
+
+`ref x` and `mutref x` must lower to `InstrBorrow` with a precise borrow
+kind. They must not lower to a generic unary operator representation. The
+backend must be able to distinguish borrow formation from other unary
+expressions.
+
+#### Escape rules
+
+A borrowed value may not outlive its owner. Escaping borrows are rejected
+unless the language construct explicitly transfers ownership or performs an
+allowed move. A borrow may not be stored in a struct field (see §54).
+
+#### Single liveness computation
+
+Liveness is computed once per function and consumed by later passes. It
+must not be recomputed opportunistically downstream.
+
+#### Drop codegen behavioral contract
+
+An owned local `x` of a type with a `Drop` implementation must, at the
+point of its last use on every control flow path, cause the emission of:
+
+```c
+TypeName_drop(&_lN);
+```
+
+in the generated C. A comment `/* drop _lN */` is not a drop. A wave that
+claims deterministic destruction is implemented must include a proof program
+whose generated C contains this call, verified by inspection.
+
+#### Drop metadata flow
+
+The checker must record which types implement `Drop` in the type table or a
+side table accessible to codegen. Without this flow, the backend cannot emit
+correct destructor calls.
+
 ---
 
 ## 15. Closures
+
+> Implementation status: SPECIFIED — W12 (lowering)
 
 ### 15.1 Closure expressions
 
@@ -1268,9 +1731,40 @@ spawn fn() {
 };
 ```
 
+### 15.5 Implementation contracts
+
+#### Capture analysis
+
+Closure bodies must be scanned for references to outer variables before
+lowering begins. Captured variables are collected and become fields of a
+generated environment struct. The capture mode of each variable follows the
+same ownership rules as explicit borrows and moves.
+
+#### Closure lifting to MIR
+
+Each closure must produce:
+
+- a lifted MIR function taking the environment as an additional parameter
+- a concrete environment struct type holding the captured variables
+- a closure expression at the original site that initializes the environment
+  and pairs it with the lifted function pointer
+
+A lowering that returns `constUnit()` for closure expressions is a silent
+miscompilation. See L011.
+
+#### Closure callable integration
+
+Closures implement the appropriate callable trait from §55
+(`Fn` / `FnMut` / `FnOnce`) depending on the capture mode of the closure
+body. A closure that calls a `FnOnce`-only operation through a captured
+value cannot itself implement `Fn`.
+
 ---
 
 ## 16. Error Handling
+
+> Implementation status: SPECIFIED — W11 (? lowering), W08 (? with generic
+> Result)
 
 ### 16.1 `Option[T]`
 
@@ -1343,19 +1837,76 @@ let s: String = parse_int(ref input)
     .unwrap_or(String.from("invalid"));
 ```
 
+### 16.6 Implementation contracts
+
+#### `?` operator behavioral contract
+
+Given a function `f` returning `Result[U, E]` and an expression `expr?`
+where `expr: Result[T, E]`:
+
+- if `expr` evaluates to `Ok(v)`, the `?` expression evaluates to `v: T`
+  and execution continues normally
+- if `expr` evaluates to `Err(e)`, the enclosing function immediately
+  returns `Err(e): Result[U, E]` and does not execute subsequent statements
+
+The generated code must contain a branch: a discriminant read on the
+result's `_tag` field, a success path that extracts `_f0` as type `T`, and
+an early-return path on the error path.
+
+For `Option[T]`, the analogous rule applies: `Some(v)` continues with `v`;
+`None` causes the enclosing function to return `None`.
+
+A lowering that returns `Unknown`, passes through `expr` unchanged, or does
+not emit a branch is not a correct implementation of `?`.
+
+#### Error propagation proof program
+
+```fuse
+fn maybe_fail(fail: Bool) -> Result[I32, Bool] {
+    if fail { return Err(true); }
+    return Ok(42);
+}
+
+fn run(fail: Bool) -> Result[I32, Bool] {
+    let v = maybe_fail(fail)?;
+    return Ok(v + 1);
+}
+
+fn main() -> I32 {
+    match run(false) {
+        Ok(v)  { return v; }
+        Err(_) { return 0; }
+    }
+}
+```
+
+Expected: exits with code 43.
+E2E fixture: `tests/e2e/error_propagation.fuse`
+
 ---
 
 ## 17. Concurrency
 
+> Implementation status: SPECIFIED — W07 (semantics), W16 (runtime ABI),
+> W21 (hosted stdlib surface)
+
 ### 17.1 `spawn`
 
 `spawn` creates a new concurrent thread of execution. It takes a closure and
-launches it asynchronously. Fuse does not use `async`/`await`.
+returns a `ThreadHandle[T]` where `T` is the closure's return type. The
+caller may discard the handle for fire-and-forget behavior or call
+`handle.join()` to wait for the thread and retrieve its result. See §39 for
+full handle semantics. Fuse does not use `async`/`await`.
 
 ```fuse
+// handle discarded: fire-and-forget
 spawn fn() {
     do_work();
 };
+
+// handle retained: join for result
+let handle: ThreadHandle[I32] = spawn fn() -> I32 { return compute(); };
+let value = handle.join().unwrap();
 ```
 
 ### 17.2 Channels (`Chan[T]`)
@@ -1419,9 +1970,56 @@ let cache = cache_lock.lock();
 // let db    = db_lock.lock();
 ```
 
+### 17.6 Implementation contracts
+
+#### Spawn behavioral contract
+
+`spawn expr` where `expr` is a closure or function value must lower to a
+runtime call of the form `fuse_rt_thread_spawn(fn_ptr, env_ptr)` which
+returns an opaque thread handle raw value. The handle is wrapped into a
+`ThreadHandle[T]` in Fuse-level code. A lowering that calls `expr`
+synchronously is not correct. A wave that claims spawn is implemented must
+include a proof program that spawns a thread and observes an effect the
+spawned thread produces.
+
+When the surface-level result of `spawn` is discarded, the compiler may
+still allocate a handle for lifetime correctness but need not emit a join.
+When the result is bound, `join()` must lower to `fuse_rt_thread_join` on
+that handle.
+
+#### Channel type behavioral contract
+
+`Chan[T]` must be represented as a distinct type kind in the type table
+(`KindChannel` with element type `T`). Send and receive operations must be
+type-checked against the element type. A send of `Bool` to a `Chan[I32]` is
+a type error.
+
+#### Channel operation lowering
+
+`ch.send(v)`, `ch.recv()`, and `ch.close()` must lower to
+`fuse_rt_chan_send`, `fuse_rt_chan_recv`, and `fuse_rt_chan_close` calls,
+respectively. The send path must encode the element type in its codegen so
+that the runtime boundary is monomorphic.
+
+#### Lock ranking enforcement
+
+`@rank(N)` constraints are enforced at compile time by the checker. A code
+path that acquires a lock of rank `N` while statically holding a lock of
+rank `≥ N` is a compile error. Enforcement must be structural, not
+heuristic.
+
+#### Send and Sync gating
+
+`spawn` requires the closure's captured environment to be `Send` (§47).
+`Shared[T]` requires `T: Send + Sync`. `Chan[T]` requires `T: Send`. The
+checker must enforce these bounds before lowering; violations must not
+reach codegen.
+
 ---
 
 ## 18. Modules and Imports
+
+> Implementation status: SPECIFIED — W03
 
 ### 18.1 Module structure
 
@@ -1492,9 +2090,31 @@ let s = Shape.Circle(1.0);           // qualified
 let s = Circle(1.0);                 // bare — only valid if unambiguous
 ```
 
+### 18.7 Implementation contracts
+
+#### Module-first import resolution
+
+Resolve an import by first treating the full dotted path as a module path.
+If no module exists at that path, retry by treating the final segment as an
+item name inside the preceding module path.
+
+#### Stdlib modules are checked like user modules
+
+Stdlib modules must be type-checked in the same pass as user modules. Any
+pass that skips stdlib bodies while still lowering or codegening them
+violates the frontend-backend contract.
+
+#### Import cycle detection
+
+Cyclic imports must produce a diagnostic naming the cycle path. The
+compiler must not hang or panic on a cyclic import graph.
+
 ---
 
 ## 19. Constants and Statics
+
+> Implementation status: SPECIFIED — W06 (declaration and checking), W14
+> (const expression evaluation)
 
 ### 19.1 `const`
 
@@ -1520,6 +2140,8 @@ static GLOBAL_COUNTER: I32 = 0;
 
 ## 20. Type Aliases
 
+> Implementation status: SPECIFIED — W06
+
 `type` introduces a transparent alias. The alias and the original type are
 interchangeable.
 
@@ -1538,6 +2160,9 @@ let d: Meters = distance(1.0, 4.0);
 ---
 
 ## 21. Iterators
+
+> Implementation status: SPECIFIED — W19 (core stdlib; depends on associated
+> types, §30)
 
 ### 21.1 `for` / `in` desugars to the iterator protocol
 
@@ -1590,9 +2215,30 @@ let big: [I32] = items
 let total: I32 = (1..=100).fold(0, fn(acc: I32, n: I32) -> I32 { acc + n });
 ```
 
+### 21.4 Implementation contracts
+
+#### `for..in` desugaring
+
+`for x in expr { body }` desugars to:
+
+```fuse
+var __iter = expr.into_iter();
+loop {
+    match __iter.next() {
+        Some(x) { body }
+        None    { break; }
+    }
+}
+```
+
+The desugaring is applied in lowering, not parsing. AST preserves the
+`for..in` shape.
+
 ---
 
 ## 22. Extern and FFI
+
+> Implementation status: SPECIFIED — W06 (declarations), W17 (codegen)
 
 ### 22.1 Extern declarations
 
@@ -1635,9 +2281,24 @@ extern fn fuse_rt_chan_recv(ch: Ptr[()]) -> Ptr[()];
 extern static ERRNO: I32;
 ```
 
+### 22.5 Implementation contracts
+
+#### Runtime bridge naming
+
+Runtime bridge functions use a stable naming convention rooted in the
+runtime surface, typically `fuse_rt_{module}_{operation}`.
+
+#### Unsafe call-site rule
+
+Every FFI call site is `unsafe` unless the language surface explicitly
+provides a safe wrapper. A safe wrapper must document and enforce its
+safety invariants.
+
 ---
 
 ## 23. Unsafe
+
+> Implementation status: SPECIFIED — W17 (backend), W19 (stdlib bridge files)
 
 ### 23.1 Unsafe blocks
 
@@ -1691,9 +2352,26 @@ pub fn read_ptr(p: Ptr[I32]) -> I32 {
 }
 ```
 
+### 23.6 Implementation contracts
+
+#### Unsafe remains visible
+
+Unsafe operations must remain visible at their use site. A safe surface
+that silently performs unsafe behavior without documented invariants is
+forbidden.
+
+#### Unsafe bridge files are enumerated
+
+New unsafe bridge files require explicit documentation updates in the
+repository layout document. The core bridge surface is restricted to files
+such as `stdlib/core/rt_bridge/alloc.fuse`, `stdlib/core/rt_bridge/panic.fuse`,
+and `stdlib/core/rt_bridge/intrinsics.fuse`.
+
 ---
 
 ## 24. Primitive Methods
+
+> Implementation status: SPECIFIED — W06
 
 Primitive types expose methods intrinsically. These do not require explicit
 `impl` blocks in user code.
@@ -1731,6 +2409,8 @@ let f = t.not();              // false
 
 ## 25. Numeric Conversions and Widening
 
+> Implementation status: SPECIFIED — W06
+
 Fuse does not perform implicit numeric conversions. Widening for operators in
 the same numeric family (e.g. `I32 == ISize`) is permitted where the wider
 type can represent all values of the narrower.
@@ -1751,6 +2431,10 @@ let g: I32  = f.toInt() as I32;   // truncates toward zero
 ---
 
 ## 26. Decorators
+
+> Implementation status: `@value` SPECIFIED — W06; `@rank` SPECIFIED — W07;
+> `@repr`, `@align` SPECIFIED — W06 (check), W17 (codegen); `@inline`, `@cold`
+> SPECIFIED — W17; `@cfg` SPECIFIED — W03 (see §37, §41, §50)
 
 Decorators appear on type declarations and synchronization primitives to
 express compile-time properties.
@@ -1835,6 +2519,8 @@ pub fn main() -> I32 {
 
 ## 28. Type Casting
 
+> Implementation status: SPECIFIED — W06 (type checking), W15 (lowering)
+
 > **Importance:** everyday need. Without explicit casts, numeric FFI and
 > pointer work require unsafe gymnastics for every type boundary crossing.
 
@@ -1860,9 +2546,28 @@ let addr: USize = p as USize;
 let p2: Ptr[U8] = addr as Ptr[U8];
 ```
 
+### 28.1 Implementation contracts
+
+#### Cast semantics
+
+- Numeric widening casts sign-extend for signed source types and zero-extend
+  for unsigned source types.
+- Numeric narrowing casts truncate the bit pattern.
+- Float-to-integer casts truncate toward zero; NaN and out-of-range values
+  produce a platform-defined but deterministic result recorded in CI goldens.
+- Pointer-to-pointer casts reinterpret bits and do not participate in
+  ownership analysis.
+- Pointer-to-integer casts produce `USize` / `ISize` representations of the
+  address value. Integer-to-pointer casts are permitted only in `unsafe`
+  contexts.
+- There is no `as` cast between unrelated nominal types.
+
 ---
 
 ## 29. Function Pointers
+
+> Implementation status: SPECIFIED — W06 (types), W12 (Fn auto-impl),
+> W15 (lowering)
 
 > **Importance:** high. Required for callbacks, dispatch tables, plugin
 > interfaces, and passing behavior across FFI boundaries. Without function
@@ -1923,9 +2628,23 @@ unsafe {
 }
 ```
 
+### 29.1 Implementation contracts
+
+#### Function pointer ABI
+
+A function pointer type `fn(A, B) -> R` has a stable C ABI representation
+equivalent to the C function pointer type `R (*)(A, B)` (after Fuse-to-C
+type mapping). Function pointers are not closures and do not carry captured
+state. They implement `Fn` / `FnMut` / `FnOnce` automatically (§55).
+
+Function pointer types across the FFI boundary must preserve the exact C
+calling convention of the target platform.
+
 ---
 
 ## 30. Associated Types
+
+> Implementation status: SPECIFIED — W06
 
 > **Importance:** high. Without associated types, generic interfaces become
 > verbose — every method must repeat type parameters. Associated types let a
@@ -1986,9 +2705,25 @@ where
 }
 ```
 
+### 30.1 Implementation contracts
+
+#### Associated type projection
+
+`Self.TypeName` and `T.TypeName` (for a type parameter `T` with a trait
+bound that declares the associated type) are projections that the checker
+must resolve to the concrete associated type declared by the applicable
+impl. Unresolved associated type projections are hard errors before codegen.
+
+#### Associated type constraints in where clauses
+
+`where T.Item = I32` constrains the associated type; the checker must
+reject impls whose associated type does not match the constraint.
+
 ---
 
 ## 31. Additional Pattern Forms
+
+> Implementation status: SPECIFIED — W10
 
 > **Importance:** medium-high. Or-patterns and range patterns eliminate
 > boilerplate repetition in match arms. Their absence forces multiple identical
@@ -2045,9 +2780,31 @@ match value {
 }
 ```
 
+### 31.4 Implementation contracts
+
+#### Or-pattern lowering
+
+`P1 | P2` matches when either inner pattern matches. Both inner patterns
+must bind the same set of names with the same types. The lowerer produces
+a disjunction of conditional branches that merge into the arm body.
+
+#### Range pattern lowering
+
+`lo..=hi` and `lo..hi` patterns lower to a pair of integer comparisons on
+the discriminant value. The endpoints must be constant expressions of the
+scrutinee's type.
+
+#### `@` binding
+
+`name @ pattern` binds the matched value to `name` while also testing the
+inner pattern. The binding must be visible in both guard expressions and
+the arm body.
+
 ---
 
 ## 32. Slice Range Indexing
+
+> Implementation status: SPECIFIED — W15 (lowering)
 
 > **Importance:** high. Sub-slicing is the core operation for parsing,
 > streaming, and buffer management. Without range indexing, working with
@@ -2078,9 +2835,21 @@ fn zero_fill(buf: mutref [U8], from: USize, to: USize) {
 }
 ```
 
+### 32.1 Implementation contracts
+
+#### Slice formation
+
+`arr[a..b]` lowers to a slice descriptor `{ ptr: base + a, len: b - a }`
+that borrows from `arr`. The slice is a borrow; it does not own or copy
+the underlying storage. Out-of-bounds ranges are a runtime panic in debug
+builds and a bounds-checked error in release builds.
+
 ---
 
 ## 33. Overflow-Aware Arithmetic
+
+> Implementation status: SPECIFIED — W15 (lowering), W17 (codegen default
+> policy), W19 (stdlib methods)
 
 > **Importance:** high for systems code. In debug builds, integer overflow
 > is a programming error and should panic. In release builds, the behavior
@@ -2114,9 +2883,28 @@ let j: Option[I32] = x.checked_mul(y);
 let k: Option[I32] = x.checked_div(y);    // also catches divide-by-zero
 ```
 
+### 33.1 Implementation contracts
+
+#### Default overflow behavior
+
+Plain `+`, `-`, `*`, `/`, `%`, `<<`, `>>` on integer types panic on overflow
+in debug builds. In release builds, the default is implementation-defined
+per-target-profile but must be deterministic and documented. Code that
+requires specific overflow behavior must use the explicit `checked_*`,
+`wrapping_*`, or `saturating_*` methods.
+
+#### Divide-by-zero
+
+Integer divide-by-zero and modulo-by-zero panic in all build profiles.
+Float divide-by-zero produces `∞` or `NaN` per IEEE 754. Neither form
+produces undefined behavior.
+
 ---
 
 ## 34. Memory Intrinsics
+
+> Implementation status: SPECIFIED — W14 (const-eval context), W17 (codegen
+> emission), W19 (stdlib surface)
 
 > **Importance:** critical for a systems language. `size_of` and `align_of`
 > are required for every custom allocator, every FFI struct, every arena, and
@@ -2158,9 +2946,26 @@ unsafe {
 }
 ```
 
+### 34.1 Implementation contracts
+
+#### `size_of[T]` and `align_of[T]`
+
+`size_of[T]()` and `align_of[T]()` return `USize` values computed at
+compile time for every concrete type. They must be callable in `const`
+contexts. Their arguments are explicit type arguments, not value arguments
+(see §13, explicit type arguments on zero-argument generic calls).
+
+#### `size_of_val`
+
+`size_of_val(ref v)` returns the run-time size of the referent. For
+statically sized types, it equals `size_of[T]()`. For slices and other
+dynamically sized referents, it returns the actual storage size.
+
 ---
 
 ## 35. Null Pointers
+
+> Implementation status: SPECIFIED — W17 (lowering), W19 (stdlib surface)
 
 > **Importance:** high. Null pointers appear constantly in C APIs, OS
 > interfaces, and optional return values from FFI. Without a way to express,
@@ -2192,9 +2997,19 @@ let same = p == q;       // pointer equality
 let is_null = p == Ptr.null[I32]();
 ```
 
+### 35.1 Implementation contracts
+
+#### `Ptr.null[T]()` lowering
+
+`Ptr.null[T]()` lowers to the integer value `0` cast to `Ptr[T]`. It is
+valid in `const` contexts and as a compile-time initializer. Dereferencing
+a null pointer is undefined behavior (trapped in debug builds).
+
 ---
 
 ## 36. Variadic Extern Functions
+
+> Implementation status: SPECIFIED — W06 (check), W17 (codegen)
 
 > **Importance:** medium-high. Many foundational C APIs — `printf`, `scanf`,
 > `open`, `ioctl`, `fcntl` — are variadic. Without variadic extern support,
@@ -2218,9 +3033,20 @@ unsafe {
 }
 ```
 
+### 36.1 Implementation contracts
+
+#### Variadic call ABI
+
+Variadic calls follow the host platform's C calling convention for variadic
+functions (typically meaning floats are promoted to doubles and short
+integers are promoted to ints at the call site). Fuse does not declare
+variadic Fuse functions; only calling variadic C functions is supported.
+
 ---
 
 ## 37. Struct Layout Control
+
+> Implementation status: SPECIFIED — W06 (check), W17 (codegen)
 
 > **Importance:** non-negotiable for FFI. Without layout control, structs
 > passed to or returned from C functions have undefined field ordering and
@@ -2307,9 +3133,37 @@ enum OsError {
 }
 ```
 
+### 37.5 Implementation contracts
+
+#### `@repr(C)` layout
+
+Fields are laid out in declaration order with C ABI padding rules for the
+target platform. Fuse-specific reordering optimizations are disabled for
+these types.
+
+#### `@repr(packed)` layout
+
+No padding is inserted between fields. Dereferencing a misaligned field
+may require an unaligned read; the compiler must emit unaligned access
+instructions on targets where natural alignment is required.
+
+#### `@align(N)` validation
+
+`N` must be a power of two at least as large as the type's natural
+alignment. The compiler must reject values smaller than the natural
+alignment.
+
+#### `@repr(Ixx)` / `@repr(Uxx)` discriminant
+
+For enums, this annotation pins the discriminant's integer type. Variants
+with explicit values must fit within the chosen integer range; overflow is
+a compile error.
+
 ---
 
 ## 38. Newtype Pattern
+
+> Implementation status: SPECIFIED — W06 (single-field struct form)
 
 > **Importance:** medium-high. Newtypes prevent units-of-measure bugs and
 > accidental API misuse at zero runtime cost. Passing a raw `I32` as a user
@@ -2356,6 +3210,8 @@ let s = t.to_seconds();    // 3.5
 
 ## 39. Thread Handles and Joining
 
+> Implementation status: SPECIFIED — W07 (type surface), W16 (runtime)
+
 > **Importance:** high. `spawn` without a join handle is fire-and-forget —
 > useful for background tasks but insufficient when the calling thread must
 > wait for a result, propagate errors from the spawned thread, or ensure
@@ -2398,9 +3254,32 @@ fn par_map[T, U](items: ref [T], f: fn(ref T) -> U) -> [U] {
 }
 ```
 
+### 39.1 Implementation contracts
+
+#### `ThreadHandle[T]` layout
+
+`ThreadHandle[T]` is an owned handle wrapping an opaque runtime thread
+identifier (typically `I64` from `fuse_rt_thread_spawn`). Dropping a
+`ThreadHandle[T]` without calling `join()` detaches the thread; the runtime
+continues to execute it. `T` is the closure's return type.
+
+#### `join()` lowering
+
+`handle.join()` lowers to `fuse_rt_thread_join(handle.raw())`, which blocks
+until the thread completes and returns a `Result[T, ThreadError]`. `Err`
+cases include thread panic and runtime-level failures.
+
+#### Send bound on captured environment
+
+The closure passed to `spawn` must capture only `Send` values (§47). The
+checker must reject a `spawn` whose closure environment contains a
+non-`Send` type.
+
 ---
 
 ## 40. Compiler Intrinsics
+
+> Implementation status: SPECIFIED — W17
 
 > **Importance:** high for systems code. Intrinsics expose CPU and compiler
 > capabilities that have no equivalent in ordinary source code: signaling
@@ -2463,9 +3342,28 @@ fn safe_divide(a: I32, b: I32) -> I32 {
 }
 ```
 
+### 40.1 Implementation contracts
+
+#### Intrinsic surface
+
+The compiler recognizes intrinsic functions by name: `unreachable`,
+`likely`, `unlikely`, `fence`, `prefetch`, `assume`. They are resolved to
+target-specific emission rather than ordinary function calls. Each
+intrinsic has a stable signature documented here; user code must not
+declare functions with the same name at module scope.
+
+#### Undefined behavior on violated assumptions
+
+Reaching `unreachable()` or violating an `assume(cond)` where `cond` is
+false is undefined behavior. Optimizers may rely on these paths being
+impossible. Debug builds must trap on these violations; release builds
+may elide the check.
+
 ---
 
 ## 41. Inline Annotations
+
+> Implementation status: SPECIFIED — W17
 
 > **Importance:** medium. Inlining decisions are normally left to the
 > optimizer, but systems code has legitimate reasons to override them: hot
@@ -2501,9 +3399,25 @@ fn handle_fatal_error(e: ref Error) -> Never {
 }
 ```
 
+### 41.1 Implementation contracts
+
+#### Inline directives
+
+- `@inline` is a hint; the compiler may inline or not.
+- `@inline(always)` requires the body to be inlined at every call site
+  unless doing so would violate soundness (recursion, ABI boundary).
+- `@inline(never)` forbids inlining.
+- `@cold` marks the function as rarely called; the compiler may place the
+  body in a cold section of the binary.
+
+Conflicting annotations (e.g. `@inline(always)` on a recursive function)
+must produce a diagnostic rather than silently fall back.
+
 ---
 
 ## 42. Strings and Raw Bytes
+
+> Implementation status: SPECIFIED — W19 (core stdlib)
 
 > **Importance:** high. Every system that reads files, handles network data,
 > or interfaces with C needs to move between text and raw byte representations.
@@ -2572,9 +3486,28 @@ let ptr: Ptr[U8] = s.as_c_str();
 let s: ref String = unsafe { String.from_utf8_unchecked(ref bytes) };
 ```
 
+### 42.5 Implementation contracts
+
+#### `c"..."` literal type
+
+`c"..."` is a lexical form that produces a null-terminated byte literal
+of type `Ptr[U8]` with `'static` storage duration. The literal is emitted
+as a read-only byte array in the generated object file. Its contents are
+the literal bytes followed by a single `0` byte; embedded NUL bytes in the
+source are a compile error.
+
+#### `String` UTF-8 invariant
+
+A `String` value must contain valid UTF-8 at all times. Construction via
+`String.from_utf8` returns `Result`; `String.from_utf8_unchecked` is
+`unsafe` and may create a value that violates the invariant, with
+undefined behavior for downstream operations that assume UTF-8.
+
 ---
 
 ## 43. Formatting and Output
+
+> Implementation status: SPECIFIED — W19 (core stdlib)
 
 > **Importance:** medium-high. Every program needs output. Without a
 > formatting system, printing anything beyond raw bytes requires manual string
@@ -2634,9 +3567,21 @@ let c = Color { r: 255, g: 128, b: 0 };
 print!("{:?}\n", c);    // Color { r: 255, g: 128, b: 0 }
 ```
 
+### 43.4 Implementation contracts
+
+#### `format!` / `print!` / `eprint!` expansion
+
+These are compiler-recognized macros rather than ordinary functions. The
+format string is parsed at compile time; each `{}` placeholder is matched
+to a positional argument whose type must implement `Format`. A mismatch
+between placeholders and arguments is a compile error.
+
 ---
 
 ## 44. Panics and Abort
+
+> Implementation status: SPECIFIED — W16 (runtime) with diagnostic-emitting
+> surface in W06
 
 > **Importance:** high. A systems language must define what happens when an
 > invariant is violated. Panics handle programmer errors (out-of-bounds
@@ -2687,9 +3632,33 @@ assert!(ptr != Ptr.null(), "null pointer in invariant-checked path");
 debug_assert!(self.is_valid(), "struct invariant violated");
 ```
 
+### 44.4 Implementation contracts
+
+#### Panic lowering
+
+`panic(msg)` lowers to `fuse_rt_panic(msg.as_ptr(), msg.len())`. Panics do
+not unwind; the runtime prints the message to stderr and terminates the
+process with a non-zero exit code. The calling convention assumes the
+runtime never returns.
+
+#### Abort lowering
+
+`abort()` lowers to `fuse_rt_abort()`, which is declared as a
+`Never`-returning function. It must not invoke drop cleanup; it
+immediately terminates the process.
+
+#### `assert!` / `debug_assert!`
+
+`assert!(cond, msg)` expands to an `if !cond { panic(msg); }` at the use
+site. `debug_assert!` expands to the same in debug builds and expands to
+nothing in release builds. Their arguments must be evaluable without side
+effects observable after the `debug_assert!` is elided.
+
 ---
 
 ## 45. Struct Update Syntax
+
+> Implementation status: SPECIFIED — W15 (lowering)
 
 > **Importance:** low-medium. Useful for constructing modified copies of
 > structs without naming every unchanged field — common in configuration
@@ -2717,9 +3686,21 @@ let quiet_config = Config {
 };
 ```
 
+### 45.1 Implementation contracts
+
+#### Spread ordering
+
+In `Config { field_a: v, ..base }`, explicit field assignments take
+precedence over the spread source. Each field in the resulting struct is
+initialized from either an explicit assignment or from the spread source,
+but not both. Moves from `base` apply only to fields not otherwise
+assigned; fields assigned explicitly do not consume `base`.
+
 ---
 
 ## 46. Compile-Time Functions (`const fn`)
+
+> Implementation status: SPECIFIED — W14
 
 > **Importance:** medium. Compile-time evaluation eliminates entire classes
 > of magic constants, enables lookup-table generation, and allows type-level
@@ -2752,9 +3733,38 @@ const fn make_sin_table() -> [F32; 256] {
 const SIN_TABLE: [F32; 256] = make_sin_table();
 ```
 
+### 46.1 Implementation contracts
+
+#### Constant evaluation surface
+
+A `const fn` body may use:
+
+- literals, arithmetic, comparison, and bitwise operations on integer and
+  boolean values
+- pattern matching, `if`, `loop`, `while` with constant control flow
+- calls to other `const fn` functions
+- struct and tuple construction and destructuring
+- array and slice indexing with constant indices
+
+A `const fn` body may not use:
+
+- FFI calls
+- allocation or deallocation
+- thread operations
+- non-`const` function calls
+- interior mutability
+
+#### Constant evaluator
+
+The compiler includes a const evaluator that runs over checked HIR. The
+evaluator is deterministic: the same input always produces the same output
+bit-for-bit.
+
 ---
 
 ## 47. Marker Traits
+
+> Implementation status: SPECIFIED — W07
 
 > **Importance:** high for safe concurrent and systems code. Marker traits
 > carry no methods — they categorize types by a property the compiler enforces.
@@ -2798,9 +3808,37 @@ struct NonSendResource {
 // spawn fn() { use(h); };   // compile error: NonSendResource is not Send
 ```
 
+### 47.1 Implementation contracts
+
+#### Auto-implementation rules
+
+- `Send` is auto-implemented for a type `T` if every field of `T` is
+  `Send`. Primitive scalar types are `Send`. `Ptr[U]`, `Cell[U]`,
+  `RefCell[U]` are not `Send`.
+- `Sync` is auto-implemented for a type `T` if every field of `T` is
+  `Sync`. Primitive scalar types are `Sync`. `Cell[U]`, `RefCell[U]`
+  are not `Sync`. `Shared[U]` is `Sync` when `U: Send`.
+- `Copy` is auto-implemented for a type `T` if every field of `T` is
+  `Copy` and `T` does not implement `Drop`. A manual impl of `Drop` for
+  a type that would otherwise be `Copy` removes the auto `Copy` impl.
+
+#### Opting out
+
+A type may opt out of an auto-implemented marker by declaring a negative
+impl (syntax: `impl !Send for T {}`). Negative impls are available only in
+the module that owns the type definition.
+
+#### Compiler enforcement
+
+The checker must reject any program that constructs a `Chan[T]`,
+`Shared[T]`, or `spawn` whose relevant type parameters do not satisfy
+`Send` / `Sync`. Violations are hard errors before lowering.
+
 ---
 
 ## 48. Trait Objects and Dynamic Dispatch
+
+> Implementation status: SPECIFIED — W13
 
 > **Importance: non-negotiable for a real systems language.** Without trait
 > objects, every collection must be homogeneous, every callback site must know
@@ -2871,9 +3909,46 @@ fn log_and_draw(item: ref (dyn Draw + dyn Format)) {
 }
 ```
 
+### 48.1 Implementation contracts
+
+#### Trait object representation
+
+`dyn Trait` is represented as a two-word fat pointer: `{ data: Ptr[()],
+vtable: Ptr[VtableOf<Trait>] }`. The vtable is a static, per-(trait, impl)
+table containing function pointers for each method in declaration order,
+preceded by the size and drop function pointer of the concrete type.
+
+#### Ownership forms on trait objects
+
+`ref dyn Trait`, `mutref dyn Trait`, and `owned dyn Trait` are all
+supported. Ownership rules apply to the `data` pointer of the fat pointer
+exactly as they would to the concrete value.
+
+#### Object safety
+
+A trait is object-safe and usable as `dyn Trait` only if:
+
+- every method's receiver is `ref self`, `mutref self`, or `owned self`
+  (not associated-function style)
+- no method has generic type parameters
+- no method mentions `Self` in a non-receiver position
+- the trait does not require any associated constants
+
+Non-object-safe traits must produce a compile error at any `dyn Trait`
+use site.
+
+#### Multi-trait dynamic dispatch
+
+`dyn A + B` produces a fat pointer whose vtable is a combined vtable
+containing entries for both traits. The order is deterministic: traits are
+listed alphabetically for vtable layout. All named traits must be
+object-safe.
+
 ---
 
 ## 49. Unions
+
+> Implementation status: SPECIFIED — W06 (check), W17 (codegen)
 
 > **Importance:** medium for most code; high for protocol parsing, hardware
 > register maps, and bit-level type reinterpretation. Enums handle the
@@ -2928,9 +4003,25 @@ fn is_loopback(addr: IpAddress) -> Bool {
 }
 ```
 
+### 49.1 Implementation contracts
+
+#### Union layout
+
+A `union` occupies the size of its largest field with alignment equal to
+the strictest alignment of any field. The compiler does not track which
+field is active; all field reads and writes are `unsafe`.
+
+#### Drop restriction
+
+A union's fields may not implement `Drop`. The language has no mechanism
+to track which field is active, so automatic drop is unsound. Use structs
+with explicit discriminants for managed resources.
+
 ---
 
 ## 50. Conditional Compilation
+
+> Implementation status: SPECIFIED — W03
 
 > **Importance: non-negotiable for a real systems language.** Writing code
 > that targets Linux, macOS, and Windows from a single source tree requires
@@ -2997,9 +4088,37 @@ fn setup_timer() {
 }
 ```
 
+### 50.1 Implementation contracts
+
+#### `@cfg` predicate evaluation
+
+`@cfg` predicates are evaluated at the resolve stage, before type
+checking. Items with a false predicate are removed from the HIR before
+check runs; they do not participate in name resolution for other items
+in the build.
+
+Supported predicate forms:
+
+- `@cfg(name = "value")` — matches when a configuration variable has the
+  given value (e.g. `os = "linux"`).
+- `@cfg(feature = "name")` — matches when the named feature is enabled
+  in the build configuration.
+- `@cfg(not(pred))` — logical negation.
+- `@cfg(all(pred, pred, ...))` — logical conjunction.
+- `@cfg(any(pred, pred, ...))` — logical disjunction.
+
+#### Duplicate-item resolution across `@cfg`
+
+When two items share a name but have mutually exclusive `@cfg` predicates,
+exactly one item survives resolution for any given build. If multiple
+items survive (predicates overlap or both evaluate true), the resolver
+must emit a diagnostic.
+
 ---
 
 ## 51. Interior Mutability
+
+> Implementation status: SPECIFIED — W19 (core stdlib)
 
 > **Importance:** significant limitation without it. Interior mutability is
 > needed for caches, lazy initialization, reference-counted values, and any
@@ -3074,9 +4193,28 @@ impl LazyConfig {
 }
 ```
 
+### 51.1 Implementation contracts
+
+#### `Cell[T]` and `RefCell[T]` marker impact
+
+Neither `Cell[T]` nor `RefCell[T]` is `Sync`. Neither is `Send` unless `T`
+is `Send`. The checker must enforce these negative impls so that
+interior-mutable types cannot be shared across threads without explicit
+synchronization (use `Shared[T]` for that).
+
+#### `RefCell[T]` runtime borrow tracking
+
+`RefCell[T]` maintains a runtime borrow count. `borrow()` increments a
+shared-borrow counter; `borrow_mut()` takes the exclusive borrow only when
+no borrows are outstanding. Violations (e.g. `borrow_mut()` while a shared
+borrow exists) panic at runtime. The compiler does not attempt to prove
+correctness at compile time.
+
 ---
 
 ## 52. Custom Allocators
+
+> Implementation status: SPECIFIED — W20
 
 > **Importance:** high for embedded, game development, and high-performance
 > servers. The default allocator is unsuitable for many systems contexts:
@@ -3140,9 +4278,28 @@ vec.push(2);
 arena.reset();    // reclaim all memory at once
 ```
 
+### 52.1 Implementation contracts
+
+#### Allocator-parameterized collections
+
+Core collections (`Vec`, `HashMap`, `Box`, etc.) are generic over an
+allocator parameter `A: Allocator`. Default parameter values resolve to
+the global `SystemAllocator` when omitted. Every allocation-taking
+collection method routes through the provided allocator; none may fall
+back to the global allocator silently.
+
+#### Global allocator
+
+The global allocator is declared once per binary. The default provides a
+thin wrapper over the runtime's `fuse_rt_alloc_*` surface. A program may
+override it with a custom global allocator via a designated attribute
+(syntax pending plan revision).
+
 ---
 
 ## 53. Visibility Granularity
+
+> Implementation status: SPECIFIED — W03
 
 > **Importance:** low-medium. Having only `pub` and private means large modules
 > cannot express "visible to sibling modules but not external users." The
@@ -3172,9 +4329,26 @@ pub struct Connection {
 }
 ```
 
+### 53.1 Implementation contracts
+
+#### Visibility levels
+
+Fuse recognizes exactly four visibility levels, in increasing order:
+
+- private (default, unannotated): visible only in the file where declared
+- `pub(mod)`: visible in the declaring module and its descendants
+- `pub(pkg)`: visible across the entire package boundary
+- `pub`: visible everywhere an import reaches
+
+The resolver must enforce these levels on every use site, including
+method resolution and field access. A narrower visibility may never shadow
+a wider one (a `pub(mod)` impl method is still `pub(mod)`).
+
 ---
 
 ## 54. Borrow Scope and Struct References
+
+> Implementation status: SPECIFIED — W09
 
 > **Importance:** medium. Fuse intentionally avoids lifetime annotations and a
 > borrow checker. This keeps the language simpler but has one concrete
@@ -3218,9 +4392,28 @@ fn process_view(buf: ref [U8], view_offset: USize, view_len: USize) {
 }
 ```
 
+### 54.1 Implementation contracts
+
+#### No borrow in struct fields
+
+Struct fields may not have a borrow type (`ref T`, `mutref T`). The
+checker must reject struct declarations whose field types contain a
+borrow at any nesting depth. This is a language-level restriction, not a
+limitation of the implementation: Fuse intentionally avoids lifetime
+annotations, and borrow-in-struct would require them.
+
+#### Borrow scope
+
+A borrow is alive from its point of formation to the end of the innermost
+enclosing block. Borrows cannot be returned unless the returned borrow
+points into a parameter that was itself borrowed; this case is handled
+structurally by the ownership checker without explicit lifetime variables.
+
 ---
 
 ## 55. Callable Traits
+
+> Implementation status: SPECIFIED — W12
 
 > **Importance:** high. Without a callable trait hierarchy, you cannot write a
 > generic function that accepts any closure or function pointer with a given
@@ -3284,9 +4477,31 @@ let f: fn(I32) -> I32 = double;
 apply_twice(ref f, 5);    // 20
 ```
 
+### 55.1 Implementation contracts
+
+#### Hierarchy and auto-impl
+
+`Fn: FnMut: FnOnce` forms a supertrait chain. The compiler auto-implements
+`Fn` / `FnMut` / `FnOnce` for:
+
+- every function pointer type `fn(A, B, ...) -> R` (implements all three)
+- every closure expression, with the most permissive trait that matches
+  the closure's capture pattern: pure captures → `Fn`, mutating captures
+  → `FnMut`, consuming captures → `FnOnce`
+
+#### Call desugaring
+
+A call `f(args)` where `f: F` and `F: Fn[Args, R]` desugars to
+`f.call(args)`. For `FnMut`, it desugars to `f.call_mut(args)`. For
+`FnOnce`, it desugars to `f.call_once(args)`. The choice is driven by the
+tightest available bound at the call site.
+
 ---
 
 ## 56. Opaque Return Types (`impl Trait`)
+
+> Implementation status: SPECIFIED — W06 (check), W08 (monomorphization),
+> W15 (lowering)
 
 > **Importance:** medium-high. Without opaque return types, returning a closure
 > or a complex iterator chain from a function forces the caller to name the
@@ -3334,6 +4549,118 @@ fn print_all(items: impl Iterator[Item=String]) {
 }
 // above is shorthand for: fn print_all[I: Iterator[Item=String]](items: I)
 ```
+
+### 56.1 Implementation contracts
+
+#### Return-position opaque types
+
+`fn f() -> impl Trait` means the function has one concrete return type,
+chosen by the function body, that implements `Trait`. Callers may not
+name the type; they see it only through `Trait`'s surface. All return
+paths in the function body must produce the same concrete type.
+
+Opaque return types are resolved during checking; the concrete type is
+recorded in the type table under a synthetic identity and is available
+for monomorphization. No runtime representation is added (this is
+`static` dispatch, not `dyn`).
+
+#### Parameter-position `impl Trait`
+
+`fn f(x: impl Trait)` is exactly equivalent to
+`fn f[T: Trait](x: T)`. The two forms generate identical code.
+
+---
+
+## 57. Backend Representation Contracts
+
+> Implementation status: SPECIFIED — W17
+
+This section defines the backend contracts that are not deducible solely
+from surface syntax but are required for correct compiler implementation.
+Violating any of them produces generated code that does not reflect the
+language semantics.
+
+### 57.1 Contract 1: The two pointer categories
+
+In the bootstrap C backend there are exactly two categories of
+pointer-typed locals.
+
+1. Borrow pointers (from `ref`, `mutref`, and implicit borrow formation).
+2. `Ptr[T]` values (raw pointers).
+
+Borrow pointers originate from borrow semantics and may need implicit
+dereference to recover values. `Ptr[T]` values are first-class pointer
+values and must never be implicitly dereferenced. The backend must track
+these categories separately.
+
+### 57.2 Contract 2: Unit erasure is total
+
+Once `()` is erased in a concrete ABI position, it is erased at every
+producer and consumer site. There is no partially materialized unit value
+in generated code. Constructors, patterns, function pointers, and
+aggregate layout must all agree.
+
+### 57.3 Contract 3: Monomorphization completeness
+
+Every emitted generic specialization must be complete and concrete. The
+backend must not emit calls to unresolved generic symbols. Partial
+specializations are a hard error before codegen.
+
+### 57.4 Contract 4: Divergence is structural
+
+A basic block ending in a diverging call has no successors. Code
+generation must not synthesize reads of values that would exist only if
+control flow continued. Join blocks, aggregate fallbacks, and destruction
+paths all depend on accurate divergence handling.
+
+### 57.5 Contract 5: Emission order and aggregate fallback
+
+Composite type definitions must be emitted before they are used by
+function signatures or locals in generated C. Aggregate fallback values
+must be typed zero-initializers such as `(FuseType_Foo){0}`, not scalar
+`0`.
+
+### 57.6 Contract 6: Identifier sanitization and collision avoidance
+
+All backend-emitted identifiers must be legal in the target backend
+language and must be collision-resistant.
+
+- C keywords must be escaped or renamed deterministically.
+- Numeric field names used internally must be sanitized.
+- Same-named symbols from different modules must not collide after
+  mangling.
+
+### 57.7 Contract 7: Closure representation
+
+A closure lowers to a pair `{ fn_ptr: Ptr[()], env_ptr: Ptr[()] }` where
+`fn_ptr` points at the lifted body function and `env_ptr` points at the
+environment struct. Closure calls dispatch through `fn_ptr` passing
+`env_ptr` as an implicit first argument. Function pointers (no captures)
+use a null `env_ptr`.
+
+### 57.8 Contract 8: Trait object representation
+
+A trait object `dyn Trait` lowers to a fat pointer
+`{ data: Ptr[()], vtable: Ptr[Vtable_Trait] }`. Vtables are emitted as
+static read-only tables, one per (trait, concrete impl) pair, with a
+deterministic layout: `[size, align, drop_fn, method_1, method_2, ...]`
+in trait declaration order.
+
+### 57.9 Contract 9: Channel and thread runtime ABI
+
+- `Chan[T]` lowers to an opaque `Ptr[()]` returned by `fuse_rt_chan_new`.
+- `ThreadHandle[T]` lowers to an opaque `I64` returned by
+  `fuse_rt_thread_spawn`.
+- The runtime surface is monomorphized: `Chan[I32]` uses the same
+  `fuse_rt_chan_send` entry point, with caller-side serialization of the
+  element type.
+
+### 57.10 Contract 10: Alignment and padding
+
+All struct layouts follow the target platform's default C ABI unless
+overridden by `@repr(packed)` or `@align(N)` (§37). The compiler must not
+reorder fields for its own purposes; layouts are stable and reproducible
+across builds.
 
 ---
 
@@ -3400,3 +4727,232 @@ Higher number = tighter binding.
 | 10 | `*` `/` `%` |
 | 11 | unary `!` `-` |
 | 12 | `?` `?.` postfix calls field access indexing |
+
+## Appendix C — Grammar Reference (EBNF)
+
+> Implementation status: SPECIFIED — W02 (parser)
+
+The EBNF below defines the surface grammar at a reference level. Later
+implementation documents may refine parser strategy, but they must not
+change the language accepted by this grammar without updating this
+section.
+
+```ebnf
+file            = { import_decl | item_decl } ;
+
+import_decl     = "import" path [ "as" IDENT ] ";" ;
+path            = IDENT { "." IDENT } ;
+
+item_decl       = fn_decl
+                | struct_decl
+                | enum_decl
+                | trait_decl
+                | impl_decl
+                | const_decl
+                | static_decl
+                | type_decl
+                | extern_decl
+                | union_decl ;
+
+fn_decl         = [ "pub" | visibility ] [ "const" ] [ decorator ]
+                  "fn" IDENT [ generic_params ]
+                  "(" [ param_list ] ")"
+                  [ "->" type_expr ]
+                  [ where_clause ]
+                  block_expr ;
+
+visibility      = "pub" "(" ( "mod" | "pkg" ) ")" ;
+
+param_list      = param { "," param } ;
+param           = [ ownership ] IDENT ":" type_expr ;
+ownership       = "ref" | "mutref" | "owned" ;
+
+struct_decl     = [ "pub" | visibility ] [ decorator ] "struct" IDENT
+                  [ generic_params ]
+                  ( "{" [ field_list ] "}"
+                  | "(" [ type_list ] ")" ";"
+                  | ";" ) ;
+
+enum_decl       = [ "pub" | visibility ] [ decorator ] "enum" IDENT
+                  [ generic_params ]
+                  "{" [ variant_list ] "}" ;
+
+variant_list    = variant { "," variant } [ "," ] ;
+variant         = IDENT [ "=" expr ]
+                | IDENT "(" [ type_list ] ")"
+                | IDENT "{" [ field_list ] "}" ;
+
+trait_decl      = [ "pub" | visibility ] "trait" IDENT [ generic_params ]
+                  [ ":" type_list ]
+                  [ where_clause ]
+                  "{" { trait_item } "}" ;
+
+trait_item      = fn_decl
+                | "type" IDENT [ ":" type_list ] ";"
+                | "const" IDENT ":" type_expr [ "=" expr ] ";" ;
+
+impl_decl       = "impl" [ generic_params ] type_expr
+                  [ ":" type_expr ]
+                  [ where_clause ]
+                  "{" { impl_item } "}" ;
+
+impl_item       = fn_decl
+                | "type" IDENT "=" type_expr ";"
+                | "const" IDENT ":" type_expr "=" expr ";" ;
+
+const_decl      = [ "pub" | visibility ] "const" IDENT ":" type_expr "=" expr ";" ;
+static_decl     = [ "pub" | visibility ] "static" IDENT ":" type_expr "=" expr ";" ;
+type_decl       = [ "pub" | visibility ] "type" IDENT [ generic_params ] "=" type_expr ";" ;
+extern_decl     = "extern" ( fn_extern | static_extern ) ;
+fn_extern       = "fn" IDENT "(" [ param_list [ "," "..." ] | "..." ] ")"
+                  [ "->" type_expr ] ";" ;
+static_extern   = "static" IDENT ":" type_expr ";" ;
+union_decl      = [ "pub" | visibility ] [ decorator ] "union" IDENT
+                  [ generic_params ] "{" field_list "}" ;
+
+field_list      = field { "," field } [ "," ] ;
+field           = [ "pub" | visibility ] IDENT ":" type_expr ;
+
+generic_params  = "[" generic_param { "," generic_param } "]" ;
+generic_param   = IDENT [ ":" type_list ] ;
+where_clause    = "where" where_pred { "," where_pred } ;
+where_pred      = type_expr ":" type_list
+                | type_expr "=" type_expr ;
+
+type_expr       = path [ type_args ]
+                | tuple_type
+                | array_type
+                | slice_type
+                | ptr_type
+                | fn_type
+                | dyn_type
+                | impl_type
+                | unit_type ;
+
+type_args       = "[" type_expr { "," type_expr } "]" ;
+tuple_type      = "(" type_expr { "," type_expr } [ "," ] ")" ;
+array_type      = "[" type_expr ";" expr "]" ;
+slice_type      = "[" type_expr "]" ;
+ptr_type        = "Ptr" "[" type_expr "]" ;
+fn_type         = "fn" "(" [ type_list ] ")" [ "->" type_expr ] ;
+dyn_type        = "dyn" type_expr { "+" type_expr } ;
+impl_type       = "impl" type_expr ;
+unit_type       = "(" ")" ;
+type_list       = type_expr { "," type_expr } ;
+
+decorator       = "@" IDENT [ "(" decorator_args ")" ] ;
+decorator_args  = decorator_arg { "," decorator_arg } ;
+decorator_arg   = IDENT [ "=" expr ] | expr ;
+
+expr            = assignment_expr ;
+assignment_expr = logic_or_expr [ assign_op assignment_expr ] ;
+logic_or_expr   = logic_and_expr { "||" logic_and_expr } ;
+logic_and_expr  = compare_expr { "&&" compare_expr } ;
+compare_expr    = or_expr { compare_op or_expr } ;
+or_expr         = xor_expr { "|" xor_expr } ;
+xor_expr        = and_expr { "^" and_expr } ;
+and_expr        = shift_expr { "&" shift_expr } ;
+shift_expr      = additive_expr { shift_op additive_expr } ;
+additive_expr   = multiplicative_expr { add_op multiplicative_expr } ;
+multiplicative_expr
+                = cast_expr { mul_op cast_expr } ;
+cast_expr       = unary_expr { "as" type_expr } ;
+unary_expr      = { unary_op } postfix_expr ;
+unary_op        = "!" | "-" | "*" | "&" ;
+postfix_expr    = primary_expr { postfix_op } ;
+postfix_op      = "." IDENT
+                | "?." IDENT
+                | "?" 
+                | "(" [ arg_list ] ")"
+                | "[" expr "]"
+                | "[" expr ".." [ expr ] "]"
+                | "[" [ expr ] ".." expr "]"
+                | "[" expr "..=" expr "]" ;
+
+primary_expr    = literal
+                | path [ type_args ]
+                | block_expr
+                | if_expr
+                | match_expr
+                | loop_expr
+                | while_expr
+                | for_expr
+                | tuple_expr
+                | struct_lit
+                | closure_expr
+                | spawn_expr
+                | unsafe_block
+                | "(" expr ")" ;
+
+block_expr      = "{" { stmt } [ expr ] "}" ;
+stmt            = let_stmt
+                | var_stmt
+                | return_stmt
+                | break_stmt
+                | continue_stmt
+                | expr_stmt
+                | item_decl ;
+
+let_stmt        = "let" pattern [ ":" type_expr ] [ "=" expr ] ";" ;
+var_stmt        = "var" IDENT [ ":" type_expr ] "=" expr ";" ;
+return_stmt     = "return" [ expr ] ";" ;
+break_stmt      = "break" [ expr ] ";" ;
+continue_stmt   = "continue" ";" ;
+expr_stmt       = expr ";" ;
+
+if_expr         = "if" expr block_expr [ "else" ( if_expr | block_expr ) ] ;
+match_expr      = "match" expr "{" { match_arm } "}" ;
+match_arm       = pattern [ "if" expr ] block_expr ;
+loop_expr       = "loop" block_expr ;
+while_expr      = "while" expr block_expr ;
+for_expr        = "for" pattern "in" expr block_expr ;
+
+pattern         = literal_pat
+                | wildcard_pat
+                | bind_pat
+                | ctor_pat
+                | tuple_pat
+                | struct_pat
+                | or_pat
+                | range_pat
+                | at_pat ;
+
+literal_pat     = literal ;
+wildcard_pat    = "_" ;
+bind_pat        = IDENT ;
+ctor_pat        = path [ "(" [ pattern_list ] ")" | "{" [ field_pat_list ] "}" ] ;
+tuple_pat       = "(" pattern_list ")" ;
+struct_pat      = path "{" [ field_pat_list ] [ ".." ] "}" ;
+or_pat          = pattern "|" pattern { "|" pattern } ;
+range_pat       = expr ".." expr | expr "..=" expr ;
+at_pat          = IDENT "@" pattern ;
+
+closure_expr    = "fn" "(" [ param_list ] ")" [ "->" type_expr ] block_expr ;
+spawn_expr      = "spawn" closure_expr ;
+unsafe_block    = "unsafe" block_expr ;
+
+compare_op      = "==" | "!=" | "<" | ">" | "<=" | ">=" ;
+assign_op       = "=" | "+=" | "-=" | "*=" | "/=" | "%="
+                | "&=" | "|=" | "^=" | "<<=" | ">>=" ;
+shift_op        = "<<" | ">>" ;
+add_op          = "+" | "-" ;
+mul_op          = "*" | "/" | "%" ;
+
+arg_list        = expr { "," expr } ;
+pattern_list    = pattern { "," pattern } ;
+field_pat_list  = field_pat { "," field_pat } ;
+field_pat       = IDENT [ ":" pattern ] ;
+tuple_expr      = "(" expr { "," expr } [ "," ] ")" ;
+struct_lit      = path "{" [ struct_lit_field { "," struct_lit_field } ]
+                  [ ".." expr ] "}" ;
+struct_lit_field = IDENT ":" expr | IDENT ;
+
+literal         = INTEGER | FLOAT | STRING | RAW_STRING | CSTRING | CHAR
+                | "true" | "false" | "None" ;
+```
+
+The grammar above is the language surface. It is not an LL(k) or LR(k)
+specification; ambiguities named in the feature sections above (struct
+literal disambiguation in §10.7, `?.` longest-match in §1.10, field versus
+method call in §9.4) are resolved by the parser per their implementation
+contracts, not by grammar rewriting.

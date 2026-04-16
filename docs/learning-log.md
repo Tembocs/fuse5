@@ -1,6 +1,6 @@
 # Fuse Learning Log
 
-> Status: normative for the next production attempt of Fuse (`fuse4`).
+> Status: normative for Fuse.
 >
 > This file is the append-only project learning log. It records lessons that the
 > team wants the future repository to preserve from the first day of work.
@@ -24,7 +24,7 @@ The first failed approach and why it failed.
 What was actually wrong.
 
 **Spec gap**:
-Which part of the language guide was silent, ambiguous, or incomplete.
+Which part of the language reference was silent, ambiguous, or incomplete.
 
 **Plan gap**:
 Which part of the implementation plan failed to schedule or constrain the work.
@@ -124,7 +124,7 @@ Every future learning-log entry must conform to this format.
 ### L001 — Lexical ambiguities must become explicit contracts
 
 Date: 2026-04-14
-Discovered during: Pre-bootstrap carryover from Fuse 3
+Discovered during: Pre-bootstrap carryover from a previous attempt
 
 **Reproducer**:
 Inputs such as `r#abc` and `parse(x)?.field` produced incorrect lexical or parse
@@ -166,7 +166,7 @@ tasks in Waves 01 and 02.
 ### L002 — Stdlib body checking is mandatory, not optional
 
 Date: 2026-04-14
-Discovered during: Pre-bootstrap carryover from Fuse 3
+Discovered during: Pre-bootstrap carryover from a previous attempt
 
 **Reproducer**:
 Skipping stdlib body checking while still lowering and codegening stdlib modules
@@ -206,7 +206,7 @@ checking mandatory.
 ### L003 — Monomorphization must reject partial specializations
 
 Date: 2026-04-14
-Discovered during: Pre-bootstrap carryover from Fuse 3
+Discovered during: Pre-bootstrap carryover from a previous attempt
 
 **Reproducer**:
 Generic functions and impl methods could produce plausible-looking specialized
@@ -247,7 +247,7 @@ recursive concreteness checks mandatory.
 ### L004 — Pointer categories are a backend architecture rule
 
 Date: 2026-04-14
-Discovered during: Pre-bootstrap carryover from Fuse 3
+Discovered during: Pre-bootstrap carryover from a previous attempt
 
 **Reproducer**:
 The same backend logic handled borrow-derived pointers and `Ptr[T]` values as if
@@ -286,7 +286,7 @@ category contract.
 ### L005 — Unit erasure must be total and global
 
 Date: 2026-04-14
-Discovered during: Pre-bootstrap carryover from Fuse 3
+Discovered during: Pre-bootstrap carryover from a previous attempt
 
 **Reproducer**:
 Partially erased unit payloads and parameters produced ghost data paths,
@@ -323,7 +323,7 @@ gives it dedicated backend tasks.
 ### L006 — Divergence must be structural, not simulated
 
 Date: 2026-04-14
-Discovered during: Pre-bootstrap carryover from Fuse 3
+Discovered during: Pre-bootstrap carryover from a previous attempt
 
 **Reproducer**:
 Lowering and codegen that simulated post-divergence values produced references to
