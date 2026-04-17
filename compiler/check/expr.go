@@ -74,13 +74,51 @@ func (c *checker) inferExpr(modPath string, scope *bodyScope, e hir.Expr, expect
 		return c.tab.Ref(inner)
 	case *hir.UnsafeExpr:
 		return c.checkBlock(modPath, scope, x.Body, expected)
+	case *hir.MatchExpr:
+		return c.inferMatch(modPath, scope, x, expected)
 	}
-	// Fallback for expressions W06 does not yet type (match, loops,
+	// Fallback for expressions W06 does not yet type (loops,
 	// closures, spawn, try, index-range). The downstream wave that
 	// lowers them is responsible for the actual typing; leaving
 	// them as Infer here is the explicit "W06 doesn't touch this"
 	// signal, not an Unknown default.
 	return c.tab.Infer()
+}
+
+// inferMatch types a match expression and runs W10 exhaustiveness
+// + unreachable-arm checks. The scrutinee's type informs every
+// arm's expected body type through the contextual-inference
+// mechanism (hint flows down from the match's own expected type).
+func (c *checker) inferMatch(modPath string, scope *bodyScope, x *hir.MatchExpr, expected typetable.TypeId) typetable.TypeId {
+	scrutType := c.checkExpr(modPath, scope, x.Scrutinee, typetable.NoType)
+	var armType typetable.TypeId
+	for i, arm := range x.Arms {
+		if arm == nil {
+			continue
+		}
+		// Pattern types against the scrutinee type — at W10 the
+		// binding is structural; full unification is W14 work.
+		c.bindPatternNames(scope, arm.Pattern, scrutType)
+		if arm.Guard != nil {
+			c.checkExpr(modPath, scope, arm.Guard, c.tab.Bool())
+		}
+		bodyType := c.checkBlock(modPath, scope, arm.Body, expected)
+		if i == 0 {
+			armType = bodyType
+		} else if armType != bodyType && bodyType != typetable.NoType && armType != typetable.NoType {
+			// At W10 all arms must produce the same type; full
+			// unification with Infer widening is W14's job.
+			c.diagnose(arm.Span,
+				fmt.Sprintf("match arm #%d body type %s differs from first arm's %s",
+					i+1, c.typeName(bodyType), c.typeName(armType)),
+				"make all arm bodies produce the same type, or use a type annotation")
+		}
+	}
+	c.CheckMatchExhaustiveness(x)
+	if armType == typetable.NoType {
+		return c.tab.Infer()
+	}
+	return armType
 }
 
 // inferLiteral picks the concrete TypeId for a literal. Integer

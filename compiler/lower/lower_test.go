@@ -81,13 +81,6 @@ func TestMinimalLowerIntReturn_Rejects(t *testing.T) {
 		src     string
 		wantMsg string
 	}{
-		{"match-expr",
-			`fn main() -> I32 {
-				return match 1 {
-					_ => 0,
-				};
-			}`,
-			"does not yet lower"},
 		{"multiple-statements",
 			`fn main() -> I32 {
 				let a: I32 = 1;
@@ -97,9 +90,9 @@ func TestMinimalLowerIntReturn_Rejects(t *testing.T) {
 		{"trailing-expr",
 			`fn main() -> I32 { 42 }`,
 			"trailing block expressions"},
-		{"bool-literal",
-			`fn main() -> I32 { return true; }`,
-			"only lowers integer literals"},
+		{"string-literal",
+			`fn main() -> I32 { return "nope"; }`,
+			"only lowers integer and boolean literals"},
 		{"logical-op",
 			`fn main() -> I32 { return 1 && 2; }`,
 			"does not yet lower binary operator"},

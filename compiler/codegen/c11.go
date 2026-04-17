@@ -106,13 +106,20 @@ func emitFunction(sb *strings.Builder, f *mir.Function, asMain bool) error {
 	// Pre-compute the register set so we can declare all locals at
 	// the top of the function body — required for ISO C11 mixed-
 	// declaration portability.
-	var regs []mir.Reg
+	// Dedupe destination registers: match-arm lowering reassigns
+	// the same shared result register from multiple blocks, and
+	// declaring it twice would be a C redeclaration error.
+	regSet := map[mir.Reg]bool{}
 	for _, blk := range f.Blocks {
 		for _, in := range blk.Insts {
 			if in.Dst != mir.NoReg {
-				regs = append(regs, in.Dst)
+				regSet[in.Dst] = true
 			}
 		}
+	}
+	regs := make([]mir.Reg, 0, len(regSet))
+	for r := range regSet {
+		regs = append(regs, r)
 	}
 	sort.Slice(regs, func(i, j int) bool { return regs[i] < regs[j] })
 	for _, r := range regs {
@@ -121,7 +128,14 @@ func emitFunction(sb *strings.Builder, f *mir.Function, asMain bool) error {
 	if len(regs) > 0 {
 		sb.WriteByte('\n')
 	}
+	// When the function has more than one block, emit labels so
+	// branches (TermJump / TermIfEq) can target them. The label
+	// scheme is `L<blockID>:` — simple, deterministic, C-safe.
+	needLabels := len(f.Blocks) > 1
 	for _, blk := range f.Blocks {
+		if needLabels {
+			fmt.Fprintf(sb, "L%d:\n", blk.ID)
+		}
 		for _, in := range blk.Insts {
 			if err := emitInst(sb, in); err != nil {
 				return fmt.Errorf("fn %s block %d: %w", f.Name, blk.ID, err)
@@ -135,8 +149,13 @@ func emitFunction(sb *strings.Builder, f *mir.Function, asMain bool) error {
 			} else {
 				fmt.Fprintf(sb, "    return r%d;\n", blk.ReturnReg)
 			}
+		case mir.TermJump:
+			fmt.Fprintf(sb, "    goto L%d;\n", blk.JumpTarget)
+		case mir.TermIfEq:
+			fmt.Fprintf(sb, "    if (r%d == (int64_t)%d) goto L%d; else goto L%d;\n",
+				blk.BranchReg, blk.BranchConst, blk.TrueTarget, blk.FalseTarget)
 		default:
-			return fmt.Errorf("fn %s block %d: unsupported terminator %s (W05 allows return only)",
+			return fmt.Errorf("fn %s block %d: unsupported terminator %s",
 				f.Name, blk.ID, blk.Term)
 		}
 	}

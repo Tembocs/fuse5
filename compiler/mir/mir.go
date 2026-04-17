@@ -102,6 +102,13 @@ const (
 	// TermReturn terminates with a return value read from the
 	// associated Block.ReturnReg register.
 	TermReturn
+	// TermJump is an unconditional branch to JumpTarget. Introduced
+	// at W10 to support match-arm merge blocks.
+	TermJump
+	// TermIfEq compares Block.BranchReg with Block.BranchConst; if
+	// equal, control flows to TrueTarget; otherwise FalseTarget.
+	// Introduced at W10 to support cascading match dispatch.
+	TermIfEq
 )
 
 // String renders a terminator for diagnostics.
@@ -111,18 +118,33 @@ func (t Terminator) String() string {
 		return "invalid"
 	case TermReturn:
 		return "return"
+	case TermJump:
+		return "jump"
+	case TermIfEq:
+		return "if_eq"
 	}
 	return "unknown"
 }
 
 // Block is a basic block: a straight-line sequence of Inst followed
-// by exactly one terminator. Control-flow branches land in W06; at
-// W05 every Block ends with TermReturn.
+// by exactly one terminator.
+//
+// Terminator-specific fields:
+//
+//   - TermReturn: ReturnReg is the register whose value leaves the fn.
+//   - TermJump: JumpTarget is the BlockId to transfer to.
+//   - TermIfEq: BranchReg compared against BranchConst; on eq jumps
+//     to TrueTarget, else to FalseTarget.
 type Block struct {
-	ID        BlockId
-	Insts     []Inst
-	Term      Terminator
-	ReturnReg Reg // only consulted when Term == TermReturn
+	ID           BlockId
+	Insts        []Inst
+	Term         Terminator
+	ReturnReg    Reg
+	JumpTarget   BlockId
+	BranchReg    Reg
+	BranchConst  int64
+	TrueTarget   BlockId
+	FalseTarget  BlockId
 }
 
 // Function is one MIR function. Registers and block IDs are allocated
@@ -252,6 +274,38 @@ func (b *Builder) Drop(dropName string, target Reg) {
 	})
 }
 
+// Jump terminates the current block with an unconditional branch
+// to target. After Jump the current block is sealed.
+func (b *Builder) Jump(target BlockId) {
+	b.current.Term = TermJump
+	b.current.JumpTarget = target
+	b.current = nil
+}
+
+// IfEq terminates the current block with a conditional branch:
+// if reg == constant, control flows to trueTarget, else
+// falseTarget.
+func (b *Builder) IfEq(reg Reg, constant int64, trueTarget, falseTarget BlockId) {
+	b.current.Term = TermIfEq
+	b.current.BranchReg = reg
+	b.current.BranchConst = constant
+	b.current.TrueTarget = trueTarget
+	b.current.FalseTarget = falseTarget
+	b.current = nil
+}
+
+// UseBlock switches the builder to continue emitting into the
+// named block. Required after BeginBlock allocates a future block
+// that a prior TermJump / TermIfEq targets.
+func (b *Builder) UseBlock(id BlockId) {
+	for _, blk := range b.fn.Blocks {
+		if blk.ID == id {
+			b.current = blk
+			return
+		}
+	}
+}
+
 // CurrentBlock returns the active block. A nil result indicates the
 // builder has already terminated its current block; callers should
 // call BeginBlock before emitting.
@@ -334,6 +388,17 @@ func (f *Function) Validate() error {
 			}
 			if !defined[blk.ReturnReg] {
 				return fmt.Errorf("mir.Validate: %s/block %d: return uses undefined register %d", f.Name, blk.ID, blk.ReturnReg)
+			}
+		case TermJump:
+			if blk.JumpTarget == NoBlock {
+				return fmt.Errorf("mir.Validate: %s/block %d: jump without target", f.Name, blk.ID)
+			}
+		case TermIfEq:
+			if !defined[blk.BranchReg] {
+				return fmt.Errorf("mir.Validate: %s/block %d: if_eq uses undefined branch register %d", f.Name, blk.ID, blk.BranchReg)
+			}
+			if blk.TrueTarget == NoBlock || blk.FalseTarget == NoBlock {
+				return fmt.Errorf("mir.Validate: %s/block %d: if_eq missing branch targets", f.Name, blk.ID)
 			}
 		default:
 			return fmt.Errorf("mir.Validate: %s/block %d: missing or invalid terminator (%s)", f.Name, blk.ID, blk.Term)

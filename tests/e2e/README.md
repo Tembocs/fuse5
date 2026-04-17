@@ -32,6 +32,7 @@ Go test that executes it.
 | `reject_aliased_mutref.fuse` | W09 | N/A (must fail to compile) | N/A | `TestBorrowRejections/reject_aliased_mutref` |
 | `reject_use_after_move.fuse` | W09 | N/A (synthetic HIR assertion) | N/A | `TestBorrowRejections/reject_use_after_move` |
 | `reject_escaping_borrow_closure.fuse` | W09 | N/A (synthetic HIR assertion) | N/A | `TestBorrowRejections/reject_escaping_borrow_closure` |
+| `match_enum_dispatch.fuse` | W10 | `42` | (empty) | `TestMatchEnumDispatch` in `tests/e2e/match_test.go` |
 
 ## Contract
 

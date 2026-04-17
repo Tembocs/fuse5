@@ -1,0 +1,22 @@
+// match_enum_dispatch.fuse — W10-P04-T01 proof.
+//
+// Exercises match dispatch on an enum: the `pick` fn returns
+// different values per variant, and main invokes it with
+// Dir.North to select the branch that returns 42.
+// Expected exit code: 42.
+
+enum Dir {
+    North,
+    South,
+}
+
+fn pick(d: Dir) -> I32 {
+    return match d {
+        Dir.North => 42,
+        Dir.South => 7,
+    };
+}
+
+fn main() -> I32 {
+    return pick(Dir.North);
+}
