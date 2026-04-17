@@ -1,6 +1,6 @@
 {
-  "current_wave": "W08",
-  "current_phase": "PCL",
+  "current_wave": "W09",
+  "current_phase": "P00",
   "updated": "2026-04-17",
-  "notes": "Monomorphization wave in closure phase. Monomorphization stub retired: HIR PathExpr.TypeArgs, HIR FnDecl.Generics populated by bridge, bridge-level turbofish reshape for `fn[T](args)` parse ambiguity, checker substitution at call sites, compiler/monomorph package with Specialize() producing deterministic mangled names and removing generic originals, driver wires Check → Specialize → Lower. Proof programs `identity_generic.fuse` and `multiple_instantiations.fuse` both compile via the full pipeline and exit 42. STUBS.md W08 history block appended; WC008 logged using the Rule 10.2 mandated 5-field template. Second wave under Rule 9.5 three-commit discipline: P00 audit (476e1ea), implementation (d927d2b), PCL (this commit). Next: commit W08 PCL and enter W09 Ownership/Liveness."
+  "notes": "Ownership and Liveness wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W09 -phase P00` exits 0: no overdue stubs, 'Ownership, liveness, borrow rules, drop codegen' row Active with retiring wave W09. Third wave under Rule 9.5 discipline. Next: implementation commit(s) for ownership contexts, the four borrow/move structural rules (no-borrow-in-field, return-borrow, mutref-aliasing, use-after-move), closure escape classification (§15.5), liveness computation with drop-intent insertion, destructor codegen, and 6 e2e proof fixtures (drop_observable + 5 rejection fixtures)."
 }
