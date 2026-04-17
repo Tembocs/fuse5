@@ -1,0 +1,11 @@
+// reject_borrow_in_field.fuse — W09 §54.1 rejection fixture.
+// Must fail to compile with a diagnostic mentioning §54.1.
+// The struct `Holder` has a `ref I32` field, which the
+// ownership checker rejects unconditionally.
+struct Holder {
+    inner: ref I32,
+}
+
+fn main() -> I32 {
+    return 0;
+}

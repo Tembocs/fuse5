@@ -11,6 +11,7 @@ import (
 	"github.com/Tembocs/fuse5/compiler/codegen"
 	"github.com/Tembocs/fuse5/compiler/hir"
 	"github.com/Tembocs/fuse5/compiler/lex"
+	"github.com/Tembocs/fuse5/compiler/liveness"
 	"github.com/Tembocs/fuse5/compiler/lower"
 	"github.com/Tembocs/fuse5/compiler/monomorph"
 	"github.com/Tembocs/fuse5/compiler/parse"
@@ -99,6 +100,17 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 		return nil, monoDiags, fmt.Errorf("monomorphization failed")
 	}
 	prog = monoProg
+
+	// Ownership / borrow / liveness / drop-intent (W09). Rejects
+	// struct fields with borrow types (§54.1), returns of borrows
+	// to locals (§54.6), aliased mutrefs (§54.7), use-after-move,
+	// and escaping non-escaping closures. Drop metadata is
+	// attached to prog for codegen; W09 does not yet consume it
+	// at the MIR emit path — that wiring lands with W15 MIR
+	// consolidation.
+	if _, livDiags := liveness.Analyze(prog); len(livDiags) != 0 {
+		return nil, livDiags, fmt.Errorf("ownership / liveness rejected the program")
+	}
 
 	// Lower to MIR.
 	mirMod, lowerDiags := lower.Lower(prog)

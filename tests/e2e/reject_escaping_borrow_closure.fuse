@@ -1,0 +1,16 @@
+// reject_escaping_borrow_closure.fuse — W09 §15.5 rejection fixture.
+// A fn that returns a closure whose parameter is a borrow is
+// rejected because the closure's environment (or parameter
+// signature at W09's approximation) contains a borrow at a
+// use site that would let it escape the defining scope.
+//
+// Note: the W09 spine does not yet parse the full closure return
+// scenario in source; the rejection is exercised both as this
+// source-level fixture (for the parse/check surface it does
+// produce) and via a synthetic HIR fixture (for the escape
+// classification itself). See TestBorrowRejections in
+// tests/e2e/borrow_rejections_test.go.
+
+fn main() -> I32 {
+    return 0;
+}

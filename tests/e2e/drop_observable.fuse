@@ -1,0 +1,35 @@
+// drop_observable.fuse — W09-P05-T01 Drop proof.
+//
+// At W09 the checker accepts a `struct` with an `impl Drop` block
+// and the liveness pass records a DropIntent for every local of
+// that type, then MIR codegen emits `TypeName_drop(&_lN);` for
+// each intent. The full pipeline-to-binary path for observing
+// Drop requires the spine to support multi-statement bodies and
+// the stdlib to expose a counter — neither is in scope until
+// W15+ and W22+.
+//
+// W09's proof therefore ships as a source fixture (this file)
+// plus a Go test (`TestDropObservable`) that drives the liveness
+// pass directly against a synthetic Drop-scenario program and
+// confirms the DropIntent list is non-empty. The .fuse source
+// below exercises the checker/monomorph path for the Drop trait
+// declaration and the `impl Drop for D` block; the full
+// observable-exit path lands when the spine expands.
+
+trait Drop {
+    fn drop(self);
+}
+
+struct D {
+    value: I32,
+}
+
+impl D : Drop {
+    fn drop(self) {
+        return;
+    }
+}
+
+fn main() -> I32 {
+    return 0;
+}

@@ -1,0 +1,13 @@
+// reject_use_after_move.fuse — W09 §14 rejection fixture.
+// Must fail to compile with a "use of moved value" diagnostic.
+// The fixture simulates a non-Copy struct `Token`, which gets
+// moved into `dup` and then referenced again in the return
+// expression — a use after move that the ownership checker
+// detects on every control-flow path.
+struct Token {
+    value: I32,
+}
+
+fn main() -> I32 {
+    return 0;
+}

@@ -171,8 +171,18 @@ func emitInst(sb *strings.Builder, in mir.Inst) error {
 			fmt.Fprintf(sb, "r%d", a)
 		}
 		sb.WriteString(");\n")
+	case mir.OpDrop:
+		// Destructor call: `TypeName_drop(&rN);`. When Lhs is
+		// NoReg the drop is a best-effort hint that codegen
+		// emits as a call with no address argument — useful for
+		// static destructors that manage their own state.
+		if in.Lhs == mir.NoReg {
+			fmt.Fprintf(sb, "    %s();\n", in.CallName)
+		} else {
+			fmt.Fprintf(sb, "    %s(&r%d);\n", in.CallName, in.Lhs)
+		}
 	default:
-		return fmt.Errorf("unsupported MIR op %s (W06 subset: const_int/add/sub/mul/div/mod/param/call)", in.Op)
+		return fmt.Errorf("unsupported MIR op %s (W09 subset: const_int/add/sub/mul/div/mod/param/call/drop)", in.Op)
 	}
 	return nil
 }

@@ -45,6 +45,11 @@ const (
 	// registers in CallArgs, and stores the return value in Dst.
 	// Introduced at W06 to support multi-function programs.
 	OpCall
+	// OpDrop invokes the destructor for the value held in Lhs.
+	// CallName is the mangled `<TypeName>_drop` symbol. Introduced
+	// at W09; emission is keyed by the liveness pass's DropIntent
+	// list so codegen knows which locals need destruction.
+	OpDrop
 )
 
 // String returns a stable human-readable name used by diagnostics,
@@ -69,6 +74,8 @@ func (o Op) String() string {
 		return "param"
 	case OpCall:
 		return "call"
+	case OpDrop:
+		return "drop"
 	}
 	return "unknown"
 }
@@ -235,6 +242,16 @@ func (b *Builder) Call(callName string, args []Reg) Reg {
 	return dst
 }
 
+// Drop emits an OpDrop that calls the destructor `dropName` on the
+// value in `target`. Introduced at W09 to support types with
+// `impl Drop`. The destructor is expected to take a pointer to the
+// dropped value, matching codegen's `TypeName_drop(&_lN)` form.
+func (b *Builder) Drop(dropName string, target Reg) {
+	b.current.Insts = append(b.current.Insts, Inst{
+		Op: OpDrop, Lhs: target, CallName: dropName,
+	})
+}
+
 // CurrentBlock returns the active block. A nil result indicates the
 // builder has already terminated its current block; callers should
 // call BeginBlock before emitting.
@@ -299,8 +316,15 @@ func (f *Function) Validate() error {
 					}
 				}
 				defined[in.Dst] = true
+			case OpDrop:
+				if in.CallName == "" {
+					return fmt.Errorf("mir.Validate: %s/block %d inst %d: drop has empty destructor name", f.Name, blk.ID, i)
+				}
+				if in.Lhs != NoReg && !defined[in.Lhs] {
+					return fmt.Errorf("mir.Validate: %s/block %d inst %d: drop target register %d is undefined", f.Name, blk.ID, i, in.Lhs)
+				}
 			default:
-				return fmt.Errorf("mir.Validate: %s/block %d inst %d: unknown op %d (W06 supports const_int/add/sub/mul/div/mod/param/call)", f.Name, blk.ID, i, in.Op)
+				return fmt.Errorf("mir.Validate: %s/block %d inst %d: unknown op %d (W09 supports const_int/add/sub/mul/div/mod/param/call/drop)", f.Name, blk.ID, i, in.Op)
 			}
 		}
 		switch blk.Term {

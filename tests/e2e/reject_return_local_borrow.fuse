@@ -1,0 +1,12 @@
+// reject_return_local_borrow.fuse — W09 §54.6 rejection fixture.
+// Must fail to compile with a diagnostic mentioning §54.6.
+// The fn `leak_ref` returns a `ref I32` but has no borrow
+// parameter — its return would have to point into a local, which
+// the ownership checker rejects structurally.
+fn leak_ref() -> ref I32 {
+    return 0;
+}
+
+fn main() -> I32 {
+    return 0;
+}

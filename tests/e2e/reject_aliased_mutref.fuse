@@ -1,0 +1,12 @@
+// reject_aliased_mutref.fuse — W09 §54.7 rejection fixture.
+// Must fail to compile with a diagnostic mentioning §54.7.
+// The fn `aliased` takes two mutref parameters to the same
+// target type, which the ownership checker rejects because
+// mutref is exclusive.
+fn aliased(mutref a: I32, mutref b: I32) -> I32 {
+    return 0;
+}
+
+fn main() -> I32 {
+    return 0;
+}

@@ -26,6 +26,12 @@ Go test that executes it.
 | (rejection proof — no `.fuse` source) | W07 | N/A (test asserts diagnostics) | N/A | `TestConcurrencyRejections` in `tests/e2e/concurrency_rejections_test.go` |
 | `identity_generic.fuse` | W08 | `42` | (empty) | `TestIdentityGeneric` in `tests/e2e/spine_test.go` |
 | `multiple_instantiations.fuse` | W08 | `42` | (empty) | `TestMultipleInstantiations` in `tests/e2e/spine_test.go` |
+| `drop_observable.fuse` | W09 | N/A (test asserts DropIntent metadata) | N/A | `TestDropObservable` in `tests/e2e/borrow_rejections_test.go` |
+| `reject_borrow_in_field.fuse` | W09 | N/A (must fail to compile) | N/A | `TestBorrowRejections/reject_borrow_in_field` |
+| `reject_return_local_borrow.fuse` | W09 | N/A (must fail to compile) | N/A | `TestBorrowRejections/reject_return_local_borrow` |
+| `reject_aliased_mutref.fuse` | W09 | N/A (must fail to compile) | N/A | `TestBorrowRejections/reject_aliased_mutref` |
+| `reject_use_after_move.fuse` | W09 | N/A (synthetic HIR assertion) | N/A | `TestBorrowRejections/reject_use_after_move` |
+| `reject_escaping_borrow_closure.fuse` | W09 | N/A (synthetic HIR assertion) | N/A | `TestBorrowRejections/reject_escaping_borrow_closure` |
 
 ## Contract
 
