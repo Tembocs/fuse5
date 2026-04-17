@@ -77,6 +77,22 @@ func TestMultipleInstantiations(t *testing.T) {
 	}
 }
 
+// TestConstFnProof is the W14-P05-T01 Verify target.
+// `const_fn.fuse` computes `factorial(5)` at compile time (120)
+// via a recursive `const fn` body, stores it in the const FACT_5,
+// and returns `FACT_5 as I32` from main. The expected exit code
+// is 120, which proves the W14 evaluator ran, the substitution
+// pass propagated the value, and the cast lowering narrowed U64
+// to I32 correctly.
+func TestConstFnProof(t *testing.T) {
+	skipIfNoCC(t)
+	result := mustBuild(t, "const_fn.fuse")
+	exit := mustRun(t, result.BinaryPath)
+	if exit != 120 {
+		t.Fatalf("const_fn exit = %d, want 120", exit)
+	}
+}
+
 // mustBuild invokes the Stage 1 driver on the named proof
 // program. The produced binary's stem defaults to the source
 // stem — use mustBuildAs when a test needs a specific output

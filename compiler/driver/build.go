@@ -9,6 +9,7 @@ import (
 	"github.com/Tembocs/fuse5/compiler/cc"
 	"github.com/Tembocs/fuse5/compiler/check"
 	"github.com/Tembocs/fuse5/compiler/codegen"
+	"github.com/Tembocs/fuse5/compiler/consteval"
 	"github.com/Tembocs/fuse5/compiler/hir"
 	"github.com/Tembocs/fuse5/compiler/lex"
 	"github.com/Tembocs/fuse5/compiler/liveness"
@@ -91,6 +92,23 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 		return nil, checkDiags, fmt.Errorf("type checking failed")
 	}
 
+	// Compile-time evaluation (W14). Evaluates `const` / `static`
+	// initializers, array-length expressions in const contexts,
+	// enum discriminants, and enforces `const fn` restrictions
+	// from §46.1. Substitutes evaluated literals back into PathExpr
+	// references so lowering sees plain literals. Must run after
+	// the checker (needs TypeIds) and before monomorphization
+	// (array-length substitution can affect specialization).
+	restrictDiags := consteval.CheckRestrictions(prog)
+	if len(restrictDiags) != 0 {
+		return nil, consteval.DiagsToLex(restrictDiags), fmt.Errorf("const fn restrictions rejected the program")
+	}
+	evalResult, evalDiags := consteval.Evaluate(prog)
+	if len(evalDiags) != 0 {
+		return nil, consteval.DiagsToLex(evalDiags), fmt.Errorf("compile-time evaluation failed")
+	}
+	consteval.Substitute(prog, evalResult)
+
 	// Monomorphize (W08). Produces a new Program where generic fns
 	// are replaced by their concrete specializations and call sites
 	// point at the specialized symbols. Only concrete fns reach
@@ -118,8 +136,10 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 		return nil, lowerDiags, fmt.Errorf("lowering failed")
 	}
 	if !hasMain(mirMod.SortedFunctionNames()) {
+		names := strings.Join(mirMod.SortedFunctionNames(), ", ")
 		return nil, nil, fmt.Errorf(
-			"no `main` function found; the W05 spine requires `fn main() -> I32 { ... }`")
+			"no `main` function found; the W05 spine requires `fn main() -> I32 { ... }` (have: %s)",
+			names)
 	}
 
 	// Codegen.

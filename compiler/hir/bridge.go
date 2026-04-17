@@ -354,6 +354,10 @@ func (b *Bridge) lowerFn(modPath string, x *ast.FnDecl) *FnDecl {
 		ret,
 		body,
 	)
+	fn.SymID = symID
+	fn.IsConst = x.IsConst
+	fn.IsExtern = x.IsExtern
+	fn.Variadic = x.Variadic
 	// Propagate the generic-parameter list into HIR so W08
 	// monomorphization can detect generic fns without re-parsing
 	// the AST. Each GenericParam carries the KindGenericParam
@@ -415,6 +419,7 @@ func (b *Bridge) lowerEnum(modPath string, x *ast.EnumDecl) *EnumDecl {
 			vfields = append(vfields, b.Builder.NewField(
 				fID, f.NodeSpan(), f.Name.Name, b.lowerType(modPath, f.Type)))
 		}
+		vSymID := b.symbolFor(modPath, v.Name)
 		variants = append(variants, &Variant{
 			Base:   Base{ID: ItemID(modPath, x.Name.Name+"."+v.Name.Name), Span: v.NodeSpan()},
 			Name:   v.Name.Name,
@@ -422,19 +427,23 @@ func (b *Bridge) lowerEnum(modPath string, x *ast.EnumDecl) *EnumDecl {
 			Tuple:  vt,
 			Fields: vfields,
 			IsUnit: len(v.Tuple) == 0 && len(v.Fields) == 0,
+			SymID:  vSymID,
 		})
 	}
-	return b.Builder.NewEnum(
+	enum := b.Builder.NewEnum(
 		ItemID(modPath, x.Name.Name),
 		x.NodeSpan(),
 		x.Name.Name,
 		typeID,
 		variants,
 	)
+	enum.SymID = symID
+	return enum
 }
 
 func (b *Bridge) lowerConst(modPath string, x *ast.ConstDecl) *ConstDecl {
 	declType := b.lowerType(modPath, x.Type)
+	symID := b.symbolFor(modPath, x.Name)
 	idb := NewIdBuilder(modPath, x.Name.Name)
 	idb.Push("value")
 	value := b.lowerExpr(modPath, idb, x.Value, declType)
@@ -444,11 +453,13 @@ func (b *Bridge) lowerConst(modPath string, x *ast.ConstDecl) *ConstDecl {
 		Name:  x.Name.Name,
 		Type:  declType,
 		Value: value,
+		SymID: symID,
 	}
 }
 
 func (b *Bridge) lowerStatic(modPath string, x *ast.StaticDecl) *StaticDecl {
 	declType := b.lowerType(modPath, x.Type)
+	symID := b.symbolFor(modPath, x.Name)
 	var value Expr
 	if x.Value != nil {
 		idb := NewIdBuilder(modPath, x.Name.Name)
@@ -462,6 +473,7 @@ func (b *Bridge) lowerStatic(modPath string, x *ast.StaticDecl) *StaticDecl {
 		Type:     declType,
 		Value:    value,
 		IsExtern: x.IsExtern,
+		SymID:    symID,
 	}
 }
 

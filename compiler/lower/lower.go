@@ -3,6 +3,7 @@ package lower
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/Tembocs/fuse5/compiler/hir"
 	"github.com/Tembocs/fuse5/compiler/lex"
@@ -141,7 +142,7 @@ func (l *lowerer) lowerExpr(modPath string, b *mir.Builder, e hir.Expr, params m
 	case *hir.LiteralExpr:
 		switch x.Kind {
 		case hir.LitInt:
-			v, err := strconv.ParseInt(x.Text, 0, 64)
+			v, err := parseIntLiteral(x.Text)
 			if err != nil {
 				l.diagnose(x.NodeSpan(),
 					fmt.Sprintf("invalid integer literal %q: %v", x.Text, err),
@@ -262,6 +263,17 @@ func (l *lowerer) lowerExpr(modPath string, b *mir.Builder, e hir.Expr, params m
 		return l.lowerMatch(modPath, b, x, params)
 	case *hir.TryExpr:
 		return l.lowerTry(modPath, b, x, params)
+	case *hir.CastExpr:
+		// W14 casts are passthroughs at MIR level: the MIR treats
+		// every integer register as int64, and the C11 backend
+		// narrows at the return boundary by consulting the fn's
+		// declared Return TypeId. This preserves the numeric
+		// value for widening casts and relies on codegen's
+		// explicit narrowing for downcasts.
+		//
+		// The checker has already validated that the source and
+		// target are compatible integer/bool/char types.
+		return l.lowerExpr(modPath, b, x.Expr, params)
 	default:
 		l.diagnose(e.NodeSpan(),
 			fmt.Sprintf("spine does not yet lower %T", e),
@@ -817,4 +829,31 @@ func litKindName(k hir.LitKind) string {
 
 func (l *lowerer) diagnose(span lex.Span, msg, hint string) {
 	l.diags = append(l.diags, Diagnostic{Span: span, Message: msg, Hint: hint})
+}
+
+// parseIntLiteral accepts Go-style integer literals plus Fuse type
+// suffixes (e.g. `42u64`, `0xFFi32`, `0b1010u8`). Underscores are
+// tolerated as digit separators (reference §1.5); the checker has
+// already validated that the suffix matches the declared type so
+// the lowerer can discard it before parsing.
+func parseIntLiteral(text string) (int64, error) {
+	clean := strings.ReplaceAll(text, "_", "")
+	for _, suf := range []string{"isize", "usize", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64"} {
+		if strings.HasSuffix(clean, suf) {
+			clean = clean[:len(clean)-len(suf)]
+			break
+		}
+	}
+	// Large unsigned literals (e.g. 0xFFFFFFFFu32) may overflow
+	// int64 when parsed as signed; fall back to unsigned and
+	// reinterpret the bits so the lowered MIR preserves the same
+	// binary value.
+	if v, err := strconv.ParseInt(clean, 0, 64); err == nil {
+		return v, nil
+	}
+	u, err := strconv.ParseUint(clean, 0, 64)
+	if err != nil {
+		return 0, err
+	}
+	return int64(u), nil
 }

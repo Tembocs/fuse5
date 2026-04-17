@@ -24,7 +24,13 @@ type FnDecl struct {
 	Params   []*Param
 	Return   typetable.TypeId // Unit when the source omitted a return type
 	TypeID   typetable.TypeId // the function's own Fn TypeId (builder-enforced)
-	Body     *Block           // nil for extern
+	// SymID is the resolve.SymbolID (stored as int to avoid import
+	// cycles) that this fn declares. Populated by the bridge; zero
+	// for synthesized fns that never entered the resolver. Passes
+	// that need to correlate a PathExpr.Symbol back to its declaring
+	// FnDecl consult this field directly.
+	SymID    int
+	Body     *Block // nil for extern
 	Generics []*GenericParam
 	IsExtern bool
 	IsConst  bool
@@ -86,6 +92,9 @@ type EnumDecl struct {
 	TypeID   typetable.TypeId
 	Variants []*Variant
 	Generics []*GenericParam
+	// SymID is the resolve.SymbolID (stored as int to avoid import
+	// cycles) that this enum declares. Populated by the bridge.
+	SymID int
 }
 
 func (e *EnumDecl) itemNode() {}
@@ -93,11 +102,14 @@ func (e *EnumDecl) itemNode() {}
 // Variant is one enum variant — unit, tuple, or struct-shaped.
 type Variant struct {
 	Base
-	Name        string
-	TypeID      typetable.TypeId // nominal TypeId of the enum
-	Tuple       []typetable.TypeId
-	Fields      []*Field
-	IsUnit      bool
+	Name   string
+	TypeID typetable.TypeId // nominal TypeId of the enum
+	Tuple  []typetable.TypeId
+	Fields []*Field
+	IsUnit bool
+	// SymID is the variant's own resolve.SymbolID (stored as int to
+	// avoid import cycles). Populated by the bridge.
+	SymID int
 }
 
 // Variant satisfies Node via its embedded Base; it is a child of
@@ -129,9 +141,12 @@ func (i *ImplDecl) itemNode() {}
 // ConstDecl is a lowered `const NAME: TYPE = EXPR;`.
 type ConstDecl struct {
 	Base
-	Name   string
-	Type   typetable.TypeId
-	Value  Expr
+	Name  string
+	Type  typetable.TypeId
+	Value Expr
+	// SymID is the resolve.SymbolID (stored as int to avoid import
+	// cycles) that this const declares. Populated by the bridge.
+	SymID int
 }
 
 func (c *ConstDecl) itemNode() {}
@@ -143,6 +158,9 @@ type StaticDecl struct {
 	Type     typetable.TypeId
 	Value    Expr // nil for extern
 	IsExtern bool
+	// SymID is the resolve.SymbolID (stored as int to avoid import
+	// cycles) that this static declares. Populated by the bridge.
+	SymID int
 }
 
 func (s *StaticDecl) itemNode() {}

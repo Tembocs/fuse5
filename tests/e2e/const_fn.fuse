@@ -1,0 +1,13 @@
+// const_fn.fuse - the W14 compile-time evaluation proof program.
+//
+// Demonstrates that the W14 const evaluator computes factorial(5) at
+// compile time (120) via a recursive const fn, stores the result in
+// FACT_5, and returns FACT_5 as I32 from main. Expected exit code: 120.
+const fn factorial(n: U64) -> U64 {
+    if n == 0u64 { return 1u64; }
+    return n * factorial(n - 1u64);
+}
+const FACT_5: U64 = factorial(5u64);
+fn main() -> I32 {
+    return FACT_5 as I32;
+}
