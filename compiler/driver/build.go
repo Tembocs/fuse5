@@ -12,6 +12,7 @@ import (
 	"github.com/Tembocs/fuse5/compiler/hir"
 	"github.com/Tembocs/fuse5/compiler/lex"
 	"github.com/Tembocs/fuse5/compiler/lower"
+	"github.com/Tembocs/fuse5/compiler/monomorph"
 	"github.com/Tembocs/fuse5/compiler/parse"
 	"github.com/Tembocs/fuse5/compiler/resolve"
 	"github.com/Tembocs/fuse5/compiler/typetable"
@@ -88,6 +89,16 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 	if checkDiags := check.Check(prog); len(checkDiags) != 0 {
 		return nil, checkDiags, fmt.Errorf("type checking failed")
 	}
+
+	// Monomorphize (W08). Produces a new Program where generic fns
+	// are replaced by their concrete specializations and call sites
+	// point at the specialized symbols. Only concrete fns reach
+	// lowering (W08 exit criterion).
+	monoProg, monoDiags := monomorph.Specialize(prog)
+	if len(monoDiags) != 0 {
+		return nil, monoDiags, fmt.Errorf("monomorphization failed")
+	}
+	prog = monoProg
 
 	// Lower to MIR.
 	mirMod, lowerDiags := lower.Lower(prog)

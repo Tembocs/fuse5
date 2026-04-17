@@ -267,20 +267,128 @@ func (c *checker) inferCall(modPath string, scope *bodyScope, x *hir.CallExpr, e
 		}
 		return c.tab.Infer()
 	}
-	if !ft.IsVariadic && len(x.Args) != len(ft.Children) {
+	// W08 turbofish: when the callee is a PathExpr with explicit
+	// type args, substitute them into the fn's generic signature
+	// so the effective parameter and return types are concrete.
+	paramTypes := ft.Children
+	retType := ft.Return
+	if callee, ok := x.Callee.(*hir.PathExpr); ok && len(callee.TypeArgs) > 0 {
+		subst := c.buildTurbofishSubst(callee)
+		if subst != nil {
+			paramTypes = make([]typetable.TypeId, len(ft.Children))
+			for i, p := range ft.Children {
+				paramTypes[i] = c.substTypeId(p, subst)
+			}
+			retType = c.substTypeId(ft.Return, subst)
+		}
+	}
+	if !ft.IsVariadic && len(x.Args) != len(paramTypes) {
 		c.diagnose(x.Span,
-			fmt.Sprintf("arity mismatch: fn takes %d arg(s), got %d", len(ft.Children), len(x.Args)),
+			fmt.Sprintf("arity mismatch: fn takes %d arg(s), got %d", len(paramTypes), len(x.Args)),
 			"check the call matches the fn's declared parameters")
 	}
 	for i, a := range x.Args {
 		var paramT typetable.TypeId
-		if i < len(ft.Children) {
-			paramT = ft.Children[i]
+		if i < len(paramTypes) {
+			paramT = paramTypes[i]
 		}
 		c.checkExpr(modPath, scope, a, paramT)
 	}
 	_ = expected
-	return ft.Return
+	return retType
+}
+
+// buildTurbofishSubst maps each KindGenericParam TypeId in the
+// callee fn's generic list to the corresponding explicit type
+// argument. Returns nil when the fn's symbol is not registered or
+// the arity doesn't match.
+func (c *checker) buildTurbofishSubst(callee *hir.PathExpr) map[typetable.TypeId]typetable.TypeId {
+	if callee.Symbol == 0 {
+		return nil
+	}
+	// Find the HIR FnDecl for this symbol by scanning modules —
+	// cheap at W08 scale; later waves can cache.
+	for _, modPath := range c.prog.Order {
+		m := c.prog.Modules[modPath]
+		for _, it := range m.Items {
+			fn, ok := it.(*hir.FnDecl)
+			if !ok {
+				continue
+			}
+			if c.prog.ItemType(callee.Symbol) != fn.TypeID {
+				continue
+			}
+			if len(fn.Generics) != len(callee.TypeArgs) {
+				return nil
+			}
+			subst := map[typetable.TypeId]typetable.TypeId{}
+			for i, g := range fn.Generics {
+				subst[g.TypeID] = callee.TypeArgs[i]
+			}
+			return subst
+		}
+	}
+	return nil
+}
+
+// substTypeId applies a TypeId substitution recursively to handle
+// structural types containing generic params. Mirrors the
+// monomorph package's substitution but is scoped to the checker's
+// inferCall path.
+func (c *checker) substTypeId(tid typetable.TypeId, subst map[typetable.TypeId]typetable.TypeId) typetable.TypeId {
+	if s, ok := subst[tid]; ok {
+		return s
+	}
+	t := c.tab.Get(tid)
+	if t == nil {
+		return tid
+	}
+	switch t.Kind {
+	case typetable.KindTuple:
+		newCh := make([]typetable.TypeId, len(t.Children))
+		changed := false
+		for i, ch := range t.Children {
+			newCh[i] = c.substTypeId(ch, subst)
+			if newCh[i] != ch {
+				changed = true
+			}
+		}
+		if !changed {
+			return tid
+		}
+		return c.tab.Tuple(newCh)
+	case typetable.KindSlice:
+		if len(t.Children) == 0 {
+			return tid
+		}
+		return c.tab.Slice(c.substTypeId(t.Children[0], subst))
+	case typetable.KindPtr:
+		if len(t.Children) == 0 {
+			return tid
+		}
+		return c.tab.Ptr(c.substTypeId(t.Children[0], subst))
+	case typetable.KindRef:
+		if len(t.Children) == 0 {
+			return tid
+		}
+		return c.tab.Ref(c.substTypeId(t.Children[0], subst))
+	case typetable.KindMutref:
+		if len(t.Children) == 0 {
+			return tid
+		}
+		return c.tab.Mutref(c.substTypeId(t.Children[0], subst))
+	case typetable.KindChannel:
+		if len(t.Children) == 0 {
+			return tid
+		}
+		return c.tab.Channel(c.substTypeId(t.Children[0], subst))
+	case typetable.KindThreadHandle:
+		if len(t.Children) == 0 {
+			return tid
+		}
+		return c.tab.ThreadHandle(c.substTypeId(t.Children[0], subst))
+	}
+	return tid
 }
 
 // inferIf types an if expression. Both arms must produce the same

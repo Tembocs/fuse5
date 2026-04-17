@@ -24,6 +24,8 @@ Go test that executes it.
 | `exit_with_value.fuse` | W05 | `42` | (empty) | `TestExitWithValue` in `tests/e2e/spine_test.go` |
 | `checker_basic.fuse` | W06 | `42` | (empty) | `TestCheckerBasicProof` in `tests/e2e/spine_test.go` |
 | (rejection proof — no `.fuse` source) | W07 | N/A (test asserts diagnostics) | N/A | `TestConcurrencyRejections` in `tests/e2e/concurrency_rejections_test.go` |
+| `identity_generic.fuse` | W08 | `42` | (empty) | `TestIdentityGeneric` in `tests/e2e/spine_test.go` |
+| `multiple_instantiations.fuse` | W08 | `42` | (empty) | `TestMultipleInstantiations` in `tests/e2e/spine_test.go` |
 
 ## Contract
 

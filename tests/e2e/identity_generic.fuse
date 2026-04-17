@@ -1,0 +1,14 @@
+// identity_generic.fuse — W08's smallest generic proof program.
+//
+// Exercises: a generic fn `identity[T]`, explicit turbofish at the
+// call site, monomorphization producing `identity__I32`, and the
+// full pipeline (parse → resolve → bridge → check → monomorph →
+// lower → codegen → cc) agreeing on types through specialization.
+// Expected exit code: 42.
+fn identity[T](x: T) -> T {
+    return x;
+}
+
+fn main() -> I32 {
+    return identity[I32](42);
+}

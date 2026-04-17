@@ -1,0 +1,25 @@
+// multiple_instantiations.fuse — W08's multi-instantiation proof.
+//
+// Exercises: the same generic fn `pick[T]` called at two distinct
+// specialization points (I32 and I64). Both specializations must
+// reach codegen as distinct C functions, and the host linker must
+// resolve both calls through `main`. Because the W05/W06 spine
+// requires single-statement fn bodies, the two call sites live in
+// helper fns whose sum is returned by main.
+// Expected exit code: 42 (21 + 21).
+
+fn pick[T](x: T) -> I32 {
+    return 21;
+}
+
+fn call_i32() -> I32 {
+    return pick[I32](0);
+}
+
+fn call_i64() -> I32 {
+    return pick[I64](0);
+}
+
+fn main() -> I32 {
+    return call_i32() + call_i64();
+}

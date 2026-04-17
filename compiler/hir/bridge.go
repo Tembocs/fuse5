@@ -345,7 +345,7 @@ func (b *Bridge) lowerFn(modPath string, x *ast.FnDecl) *FnDecl {
 		idb.Pop()
 	}
 
-	return b.Builder.NewFn(
+	fn := b.Builder.NewFn(
 		ItemID(modPath, x.Name.Name),
 		x.NodeSpan(),
 		x.Name.Name,
@@ -354,6 +354,25 @@ func (b *Bridge) lowerFn(modPath string, x *ast.FnDecl) *FnDecl {
 		ret,
 		body,
 	)
+	// Propagate the generic-parameter list into HIR so W08
+	// monomorphization can detect generic fns without re-parsing
+	// the AST. Each GenericParam carries the KindGenericParam
+	// TypeId allocated in pushGenerics.
+	if len(x.Generics) > 0 {
+		fn.Generics = make([]*GenericParam, 0, len(x.Generics))
+		for _, g := range x.Generics {
+			gid, ok := b.genericScope[g.Name.Name]
+			if !ok {
+				gid = b.Types.Infer()
+			}
+			fn.Generics = append(fn.Generics, &GenericParam{
+				Base:   Base{ID: ItemID(modPath, x.Name.Name+"#"+g.Name.Name), Span: g.NodeSpan()},
+				Name:   g.Name.Name,
+				TypeID: gid,
+			})
+		}
+	}
+	return fn
 }
 
 func (b *Bridge) lowerStruct(modPath string, x *ast.StructDecl) *StructDecl {
@@ -830,7 +849,19 @@ func (b *Bridge) lowerPathExpr(modPath string, idb *IdBuilder, x *ast.PathExpr) 
 			typ = tid
 		}
 	}
-	return b.Builder.NewPath(idb.Child("path:"+strings.Join(segs, ".")), x.NodeSpan(), symID, segs, typ)
+	// Explicit turbofish type args — `identity[I32]`. Lower each to a
+	// TypeId so W08 monomorphization can drive specialization from the
+	// checked HIR alone.
+	var typeArgs []typetable.TypeId
+	if len(x.TypeArgs) > 0 {
+		typeArgs = make([]typetable.TypeId, 0, len(x.TypeArgs))
+		for _, ta := range x.TypeArgs {
+			typeArgs = append(typeArgs, b.lowerType(modPath, ta))
+		}
+	}
+	p := b.Builder.NewPath(idb.Child("path:"+strings.Join(segs, ".")), x.NodeSpan(), symID, segs, typ)
+	p.TypeArgs = typeArgs
+	return p
 }
 
 func (b *Bridge) lowerBinary(modPath string, idb *IdBuilder, x *ast.BinaryExpr) *BinaryExpr {
@@ -887,6 +918,23 @@ func (b *Bridge) lowerCast(modPath string, idb *IdBuilder, x *ast.CastExpr) *Cas
 }
 
 func (b *Bridge) lowerCall(modPath string, idb *IdBuilder, x *ast.CallExpr) *CallExpr {
+	// Turbofish disambiguation: `identity[I32](42)` parses as
+	// `CallExpr{Callee: IndexExpr{Receiver: PathExpr(identity),
+	// Index: I32}}`. When the index position refers only to types
+	// (not a value expression), reshape the callee into a
+	// PathExpr with TypeArgs so W08 monomorphization can consume
+	// it. This is a bridge-level fix for an unavoidable parser
+	// ambiguity — source-level syntax cannot distinguish indexing
+	// from turbofish without lookahead.
+	if idxCallee, ok := x.Callee.(*ast.IndexExpr); ok {
+		if reshaped, ok := b.tryReshapeTurbofish(modPath, idxCallee); ok {
+			x = &ast.CallExpr{
+				NodeBase: x.NodeBase,
+				Callee:   reshaped,
+				Args:     x.Args,
+			}
+		}
+	}
 	callee := b.lowerExpr(modPath, idb.Push("callee"), x.Callee, typetable.NoType)
 	idb.Pop()
 	args := make([]Expr, 0, len(x.Args))
@@ -901,6 +949,63 @@ func (b *Bridge) lowerCall(modPath string, idb *IdBuilder, x *ast.CallExpr) *Cal
 		typ = cT.Return
 	}
 	return b.Builder.NewCall(idb.Child("call"), x.NodeSpan(), callee, args, typ)
+}
+
+// tryReshapeTurbofish recognizes the pattern `PathExpr[TypeArgs]`
+// emitted by the parser for a turbofish call and converts it to a
+// PathExpr carrying explicit TypeArgs. Returns ok=false when the
+// shape doesn't match (e.g., indexing a non-path value, or an
+// index position that isn't type-shaped).
+func (b *Bridge) tryReshapeTurbofish(modPath string, ix *ast.IndexExpr) (*ast.PathExpr, bool) {
+	pe, ok := ix.Receiver.(*ast.PathExpr)
+	if !ok {
+		return nil, false
+	}
+	// The receiver must resolve to a generic fn. Bridge can't see
+	// that directly, so it accepts any resolved PathExpr whose
+	// symbol points at a fn item type and whose index is a
+	// type-shaped expression.
+	sym, hasBinding := b.Resolved.Bindings[resolve.SiteKey{Module: modPath, Span: pe.NodeSpan()}]
+	if !hasBinding {
+		return nil, false
+	}
+	fnTypeID, ok := b.typeOfSym[int(sym)]
+	if !ok {
+		return nil, false
+	}
+	ft := b.Types.Get(fnTypeID)
+	if ft == nil || ft.Kind != typetable.KindFn {
+		return nil, false
+	}
+	// Reshape: index expression → PathType at AST level.
+	typeArg, ok := exprAsType(ix.Index)
+	if !ok {
+		return nil, false
+	}
+	reshaped := &ast.PathExpr{
+		NodeBase: pe.NodeBase,
+		Segments: pe.Segments,
+		TypeArgs: []ast.Type{typeArg},
+	}
+	return reshaped, true
+}
+
+// exprAsType treats an expression as a type (for turbofish
+// reshaping). Only PathExpr with no TypeArgs of its own is
+// accepted; nested structural shapes can be added as they become
+// necessary.
+func exprAsType(e ast.Expr) (ast.Type, bool) {
+	switch x := e.(type) {
+	case *ast.PathExpr:
+		if len(x.TypeArgs) != 0 {
+			return nil, false
+		}
+		return &ast.PathType{
+			NodeBase: x.NodeBase,
+			Segments: x.Segments,
+		}, true
+	}
+	return nil, false
 }
 
 // tryLowerFieldChainAsPath checks whether the FieldExpr chain rooted

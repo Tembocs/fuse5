@@ -51,6 +51,32 @@ func TestCheckerBasicProof(t *testing.T) {
 	}
 }
 
+// TestIdentityGeneric is the W08-P06-T01 Verify target.
+// `identity_generic.fuse` exercises a generic `fn identity[T]`
+// called with an explicit turbofish; monomorphization produces
+// `identity__I32` which is what main calls.
+func TestIdentityGeneric(t *testing.T) {
+	skipIfNoCC(t)
+	result := mustBuild(t, "identity_generic.fuse")
+	exit := mustRun(t, result.BinaryPath)
+	if exit != 42 {
+		t.Fatalf("identity_generic exit = %d, want 42", exit)
+	}
+}
+
+// TestMultipleInstantiations is the W08-P06-T02 Verify target.
+// `multiple_instantiations.fuse` exercises two specializations of
+// the same generic fn with different type args; both must reach
+// codegen as distinct C functions and both calls must link.
+func TestMultipleInstantiations(t *testing.T) {
+	skipIfNoCC(t)
+	result := mustBuild(t, "multiple_instantiations.fuse")
+	exit := mustRun(t, result.BinaryPath)
+	if exit != 42 {
+		t.Fatalf("multiple_instantiations exit = %d, want 42", exit)
+	}
+}
+
 // mustBuild invokes the Stage 1 driver on the named proof program.
 // The binary lives under the test's temporary directory so parallel
 // test runs don't collide.

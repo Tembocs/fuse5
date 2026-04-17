@@ -17,11 +17,14 @@ func (*LiteralExpr) exprNode() {}
 // PathExpr is a resolved path reference. Unlike the AST form, HIR
 // PathExpr carries the resolved target: Symbol is the resolve.SymbolID
 // of what this path names, and Segments is preserved for diagnostics
-// and stable identity.
+// and stable identity. TypeArgs holds the explicit turbofish type
+// arguments (e.g. `identity[I32]`); W08 monomorphization consumes
+// them to drive specialization.
 type PathExpr struct {
 	TypedBase
 	Symbol   int // resolve.SymbolID (kept as int to avoid import cycle)
 	Segments []string
+	TypeArgs []typetable.TypeId
 }
 
 func (*PathExpr) exprNode() {}
