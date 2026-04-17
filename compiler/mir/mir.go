@@ -37,6 +37,14 @@ const (
 	OpMul
 	OpDiv
 	OpMod
+	// OpParam reads the function parameter at ParamIndex into Dst.
+	// Introduced at W06 to support fn parameters; the W05 spine did
+	// not yet need this opcode.
+	OpParam
+	// OpCall invokes the function named CallName, passing the
+	// registers in CallArgs, and stores the return value in Dst.
+	// Introduced at W06 to support multi-function programs.
+	OpCall
 )
 
 // String returns a stable human-readable name used by diagnostics,
@@ -57,6 +65,10 @@ func (o Op) String() string {
 		return "div"
 	case OpMod:
 		return "mod"
+	case OpParam:
+		return "param"
+	case OpCall:
+		return "call"
 	}
 	return "unknown"
 }
@@ -64,11 +76,14 @@ func (o Op) String() string {
 // Inst is one non-terminator instruction inside a Block. Fields that
 // are unused for a given Op are zero.
 type Inst struct {
-	Op       Op
-	Dst      Reg
-	Lhs      Reg
-	Rhs      Reg
-	IntValue int64
+	Op         Op
+	Dst        Reg
+	Lhs        Reg
+	Rhs        Reg
+	IntValue   int64
+	ParamIndex int    // OpParam: position in the containing fn's param list
+	CallName   string // OpCall: C-level name of the callee
+	CallArgs   []Reg  // OpCall: argument registers in order
 }
 
 // Terminator enumerates how a Block may end. Each Block has exactly
@@ -107,10 +122,11 @@ type Block struct {
 // by the Builder methods and remain stable for the lifetime of the
 // Function (so tests can assert on specific register numbers).
 type Function struct {
-	Name    string
-	Module  string
-	NumRegs int // total allocated registers (including NoReg slot 0)
-	Blocks  []*Block
+	Name      string
+	Module    string
+	NumRegs   int // total allocated registers (including NoReg slot 0)
+	NumParams int // parameter count; first NumParams registers are params
+	Blocks    []*Block
 }
 
 // Module is a collection of MIR functions that share a compilation
@@ -191,6 +207,34 @@ func (b *Builder) Return(reg Reg) {
 	b.current = nil
 }
 
+// Param emits an OpParam reading the function parameter at index.
+// Must be called once per parameter at the start of the function
+// body; each call advances the param index automatically via the
+// Function.NumParams counter. Returns the destination register.
+func (b *Builder) Param(index int) Reg {
+	dst := b.NewReg()
+	b.current.Insts = append(b.current.Insts, Inst{
+		Op: OpParam, Dst: dst, ParamIndex: index,
+	})
+	if index+1 > b.fn.NumParams {
+		b.fn.NumParams = index + 1
+	}
+	return dst
+}
+
+// Call emits an OpCall invoking the named fn with the given argument
+// registers and returns the destination register that receives the
+// result.
+func (b *Builder) Call(callName string, args []Reg) Reg {
+	dst := b.NewReg()
+	cloned := make([]Reg, len(args))
+	copy(cloned, args)
+	b.current.Insts = append(b.current.Insts, Inst{
+		Op: OpCall, Dst: dst, CallName: callName, CallArgs: cloned,
+	})
+	return dst
+}
+
 // CurrentBlock returns the active block. A nil result indicates the
 // builder has already terminated its current block; callers should
 // call BeginBlock before emitting.
@@ -234,8 +278,29 @@ func (f *Function) Validate() error {
 					return fmt.Errorf("mir.Validate: %s/block %d inst %d: use of undefined register %d", f.Name, blk.ID, i, in.Rhs)
 				}
 				defined[in.Dst] = true
+			case OpParam:
+				if in.Dst == NoReg {
+					return fmt.Errorf("mir.Validate: %s/block %d inst %d: param without destination", f.Name, blk.ID, i)
+				}
+				if in.ParamIndex < 0 {
+					return fmt.Errorf("mir.Validate: %s/block %d inst %d: negative param index", f.Name, blk.ID, i)
+				}
+				defined[in.Dst] = true
+			case OpCall:
+				if in.Dst == NoReg {
+					return fmt.Errorf("mir.Validate: %s/block %d inst %d: call without destination", f.Name, blk.ID, i)
+				}
+				if in.CallName == "" {
+					return fmt.Errorf("mir.Validate: %s/block %d inst %d: call has empty target name", f.Name, blk.ID, i)
+				}
+				for j, a := range in.CallArgs {
+					if !defined[a] {
+						return fmt.Errorf("mir.Validate: %s/block %d inst %d: call arg %d uses undefined register %d", f.Name, blk.ID, i, j, a)
+					}
+				}
+				defined[in.Dst] = true
 			default:
-				return fmt.Errorf("mir.Validate: %s/block %d inst %d: unknown op %d (W05 supports const_int/add/sub/mul/div/mod only)", f.Name, blk.ID, i, in.Op)
+				return fmt.Errorf("mir.Validate: %s/block %d inst %d: unknown op %d (W06 supports const_int/add/sub/mul/div/mod/param/call)", f.Name, blk.ID, i, in.Op)
 			}
 		}
 		switch blk.Term {

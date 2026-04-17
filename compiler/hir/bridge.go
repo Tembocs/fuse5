@@ -48,19 +48,81 @@ type Bridge struct {
 	Builder   *Builder
 	Diags     []lex.Diagnostic
 	typeOfSym map[int]typetable.TypeId
+
+	// genericScope maps the names of generic parameters visible in
+	// the currently-lowered item to their KindGenericParam TypeIds.
+	// Populated by pushGenerics before lowering an item's types and
+	// cleared afterwards so leakage across items is impossible.
+	genericScope map[string]typetable.TypeId
 }
 
 // NewBridge constructs a Bridge with all inputs wired up. The
 // returned Bridge is ready to call Run.
 func NewBridge(tab *typetable.Table, resolved *resolve.Resolved, sources []*resolve.SourceFile) *Bridge {
 	return &Bridge{
-		Types:     tab,
-		Resolved:  resolved,
-		Sources:   sources,
-		Program:   NewProgram(tab),
-		Builder:   NewBuilder(tab),
-		typeOfSym: map[int]typetable.TypeId{},
+		Types:        tab,
+		Resolved:     resolved,
+		Sources:      sources,
+		Program:      NewProgram(tab),
+		Builder:      NewBuilder(tab),
+		typeOfSym:    map[int]typetable.TypeId{},
+		genericScope: map[string]typetable.TypeId{},
 	}
+}
+
+// pushGenerics registers every generic parameter in `generics` into
+// the genericScope so subsequent calls to lowerType can map a bare
+// `T` to its KindGenericParam TypeId. Callers match a pushGenerics
+// with a popGenerics in the same item frame.
+func (b *Bridge) pushGenerics(modPath string, anchor string, generics []*ast.GenericParam) []string {
+	var names []string
+	for i, g := range generics {
+		// Synthesize a SymbolID surrogate by hashing the
+		// (module, anchor, index) triple so two distinct generic
+		// params at different sites never share a TypeId. A real
+		// SymbolID isn't available for generics because the
+		// resolver doesn't register them; the bridge owns this
+		// numbering.
+		sym := genericSymbol(modPath, anchor, i)
+		id := b.Types.GenericParam(sym, modPath, g.Name.Name)
+		b.genericScope[g.Name.Name] = id
+		names = append(names, g.Name.Name)
+	}
+	return names
+}
+
+// popGenerics removes the names added by pushGenerics.
+func (b *Bridge) popGenerics(names []string) {
+	for _, n := range names {
+		delete(b.genericScope, n)
+	}
+}
+
+// genericSymbol synthesizes a stable, deterministic int handle for a
+// generic parameter so TypeTable.Nominal/GenericParam identity works.
+// The shape is FNV-1a over (module + "::" + anchor + "#" + idx).
+// Collisions across real SymbolIDs are avoided by OR-ing the high
+// bit; resolve.SymbolID values are produced sequentially from 1 and
+// never have the high bit set.
+func genericSymbol(modPath, anchor string, idx int) int {
+	const offset = 1 << 30
+	h := uint32(2166136261)
+	mix := func(s string) {
+		for i := 0; i < len(s); i++ {
+			h ^= uint32(s[i])
+			h *= 16777619
+		}
+	}
+	mix(modPath)
+	mix("::")
+	mix(anchor)
+	mix("#")
+	// append idx (little-endian) without importing strconv
+	for i := 0; i < 4; i++ {
+		h ^= uint32(idx >> (8 * i) & 0xFF)
+		h *= 16777619
+	}
+	return int(h&0x3FFFFFFF) | offset
 }
 
 // Run performs the two-phase bridge: phase 1 registers nominal and
@@ -167,14 +229,17 @@ func (b *Bridge) registerItem(modPath string, it ast.Item) {
 	}
 }
 
-// registerFn computes and stores a Fn TypeId for x. Generics are
-// preserved by emitting GenericParam TypeIds for any unresolved path
-// that refers to a declared generic — W08 specialises these.
+// registerFn computes and stores a Fn TypeId for x. Generic
+// parameters are pushed into the bridge's generic scope so that
+// bare references to `T` inside param/return types map to their
+// KindGenericParam TypeId (W08 later specialises these).
 func (b *Bridge) registerFn(modPath string, x *ast.FnDecl) {
 	symID := b.symbolFor(modPath, x.Name)
 	if symID == 0 {
 		return
 	}
+	pushed := b.pushGenerics(modPath, x.Name.Name, x.Generics)
+	defer b.popGenerics(pushed)
 	params := make([]typetable.TypeId, 0, len(x.Params))
 	for _, p := range x.Params {
 		params = append(params, b.lowerType(modPath, p.Type))
@@ -255,6 +320,8 @@ func (b *Bridge) lowerFn(modPath string, x *ast.FnDecl) *FnDecl {
 	if !ok {
 		fnType = b.Types.Fn(nil, b.Types.Unit(), false)
 	}
+	pushed := b.pushGenerics(modPath, x.Name.Name, x.Generics)
+	defer b.popGenerics(pushed)
 	idb := NewIdBuilder(modPath, x.Name.Name)
 	idb.Push("params")
 	params := make([]*Param, 0, len(x.Params))
@@ -509,11 +576,15 @@ func (b *Bridge) lowerType(modPath string, t ast.Type) typetable.TypeId {
 }
 
 // lowerPathType resolves a PathType to a TypeId via: (a) primitive
-// name lookup; (b) resolve.Bindings for the path's span; (c)
-// fallback to Infer.
+// name lookup; (b) generic-scope lookup for bare param names like
+// `T` inside a generic fn/impl; (c) resolve.Bindings for the path's
+// span; (d) fallback to Infer.
 func (b *Bridge) lowerPathType(modPath string, x *ast.PathType) typetable.TypeId {
 	if len(x.Segments) == 1 {
 		if tid := primitiveKindLookup(b.Types, x.Segments[0].Name); tid != typetable.NoType {
+			return tid
+		}
+		if tid, ok := b.genericScope[x.Segments[0].Name]; ok && len(x.Args) == 0 {
 			return tid
 		}
 	}
@@ -662,6 +733,16 @@ func (b *Bridge) lowerExpr(modPath string, idb *IdBuilder, e ast.Expr, hint type
 	case *ast.CallExpr:
 		return b.lowerCall(modPath, idb, x)
 	case *ast.FieldExpr:
+		// FieldExpr chains that the resolver already bound to a
+		// module-qualified item (e.g. `std.io.println`) are
+		// lowered as a single PathExpr carrying the resolved
+		// symbol so the checker can look up the item's TypeId
+		// directly. Chains that don't resolve fall through to
+		// the ordinary FieldExpr path — they might be field
+		// accesses on a local value, which W06's checker handles.
+		if p, ok := b.tryLowerFieldChainAsPath(modPath, idb, x); ok {
+			return p
+		}
 		return b.lowerField(modPath, idb, x)
 	case *ast.OptFieldExpr:
 		return b.lowerOptField(modPath, idb, x)
@@ -820,6 +901,52 @@ func (b *Bridge) lowerCall(modPath string, idb *IdBuilder, x *ast.CallExpr) *Cal
 		typ = cT.Return
 	}
 	return b.Builder.NewCall(idb.Child("call"), x.NodeSpan(), callee, args, typ)
+}
+
+// tryLowerFieldChainAsPath checks whether the FieldExpr chain rooted
+// at x was resolved by the W03 resolver as a module-qualified path
+// (via Bindings[SiteKey{module, span}]). If so, it emits a PathExpr
+// that carries the resolved symbol and the corresponding TypeId,
+// replacing the ordinary FieldExpr lowering. This keeps the W06
+// checker's `inferPath` able to look up `std.io.println` directly
+// through the symbol → TypeId map without re-flattening the chain.
+func (b *Bridge) tryLowerFieldChainAsPath(modPath string, idb *IdBuilder, x *ast.FieldExpr) (*PathExpr, bool) {
+	sym, ok := b.Resolved.Bindings[resolve.SiteKey{Module: modPath, Span: x.NodeSpan()}]
+	if !ok {
+		return nil, false
+	}
+	// Walk the chain to recover the dotted segments for diagnostic
+	// fidelity (kept verbatim from source).
+	segs := flattenAstChain(x)
+	if len(segs) == 0 {
+		return nil, false
+	}
+	typ := b.Types.Infer()
+	if tid, ok := b.typeOfSym[int(sym)]; ok {
+		typ = tid
+	}
+	return b.Builder.NewPath(idb.Child("path:"+strings.Join(segs, ".")), x.NodeSpan(), int(sym), segs, typ), true
+}
+
+// flattenAstChain walks an ast.FieldExpr whose receiver is a
+// PathExpr (possibly wrapped in further FieldExprs) and returns
+// the dotted segment list.
+func flattenAstChain(e ast.Expr) []string {
+	switch v := e.(type) {
+	case *ast.PathExpr:
+		out := make([]string, 0, len(v.Segments))
+		for _, s := range v.Segments {
+			out = append(out, s.Name)
+		}
+		return out
+	case *ast.FieldExpr:
+		inner := flattenAstChain(v.Receiver)
+		if inner == nil {
+			return nil
+		}
+		return append(inner, v.Name.Name)
+	}
+	return nil
 }
 
 func (b *Bridge) lowerField(modPath string, idb *IdBuilder, x *ast.FieldExpr) *FieldExpr {

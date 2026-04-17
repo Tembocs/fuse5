@@ -28,11 +28,10 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Type checker | compiler/check/ (empty) | no types checked | "type checker not yet implemented" | W06 |
-| Concurrency checker (Send/Sync/Chan/spawn/@rank) | compiler/check/ (empty) | no concurrency enforcement | "concurrency checker not yet implemented" | W07 |
+| Concurrency checker (Send/Sync/Chan/spawn/@rank) | compiler/check/ (W06 type checker only; no concurrency enforcement) | spawn/Chan/@rank use is untyped at W06 | "concurrency checker not yet implemented" | W07 |
 | Monomorphization | compiler/monomorph/ (empty) | no generic specialization | "monomorphization not yet implemented" | W08 |
 | Ownership, liveness, borrow rules, drop codegen | compiler/liveness/ (empty) | no ownership enforcement | "ownership/liveness not yet implemented" | W09 |
-| Pattern matching dispatch and exhaustiveness | compiler/check/ (empty) | no match dispatch | "pattern matching not yet implemented" | W10 |
+| Pattern matching dispatch and exhaustiveness | compiler/check/ (W06 type checker only; no match dispatch/exhaustiveness) | match arms type-check but exhaustiveness is not enforced | "pattern matching not yet implemented" | W10 |
 | Error propagation (`?` operator) | compiler/lower/ (W05 spine only; no `?` lowering) | `?` operator emits a lowerer diagnostic | "error propagation not yet implemented" | W11 |
 | Closures, capture, `move` prefix, Fn/FnMut/FnOnce | compiler/lower/ (W05 spine only; no closure lifting) | closure expressions emit a lowerer diagnostic | "closures not yet implemented" | W12 |
 | Trait objects (`dyn Trait`, vtables, object safety) | compiler/codegen/ (W05 C11 subset; no dynamic dispatch) | `dyn Trait` use emits a codegen diagnostic | "trait objects not yet implemented" | W13 |
@@ -234,5 +233,54 @@ Retired:
   sub-cases), `TestHelloExit` (exit 0), `TestExitWithValue` (exit 42
   via `6 * 7`). `tests/e2e/README.md` created as the proof-program
   registry per Rule 6.8.
+
+Rescheduled: (none this wave)
+
+### W06 — Type Checking
+
+Added: (none this wave)
+
+Retired:
+- Type checker (compiler/check/checker.go, compiler/check/body.go,
+  compiler/check/expr.go, compiler/check/trait.go,
+  compiler/check/assoc.go, compiler/check/items.go,
+  compiler/check/repr.go, compiler/check/invariant.go) — confirmed
+  retired by `go test ./compiler/check/... -v` and each wave-spec
+  Verify command. Proof surface: `TestFunctionTypeRegistration`,
+  `TestTwoPassChecker`, `TestNominalEquality`, `TestPrimitiveMethods`,
+  `TestNumericWidening` (widen + narrow-rejection sub-cases),
+  `TestCastSemantics` (numeric-ok + bool-rejected),
+  `TestConcreteTraitMethodLookup`, `TestTraitBoundLookup`
+  (umbrella), `TestBoundChainLookup`, `TestCoherenceOrphan`
+  (conflicting impls + orphan rule), `TestTraitParameters`,
+  `TestContextualInference` (I64 literal hinted from let),
+  `TestZeroArgTypeArgs`, `TestLiteralTyping`,
+  `TestAssocTypeProjection`, `TestAssocTypeConstraints`,
+  `TestFnPointerType`, `TestImplTraitParam`, `TestImplTraitReturn`,
+  `TestUnionCheck` (primitive-ok + non-trivial-rejected),
+  `TestNewtypePattern`, `TestReprAnnotationCheck` (8 sub-cases
+  including conflicting @repr, int-on-struct rejection,
+  non-power-of-two @align), `TestVariadicExternCheck`,
+  `TestStdlibBodyChecking`, `TestNoUnknownAfterCheck`. End-to-end
+  proof `TestCheckerBasicProof` compiles `checker_basic.fuse`
+  (a multi-fn program with typed parameters and a direct call)
+  and confirms exit 42.
+
+Additionally extended (non-retiring-this-wave):
+- MIR gained `OpParam` and `OpCall` so lowered code can read
+  parameters and invoke named functions. The lowerer's spine
+  opens up to multi-fn programs with typed int parameters.
+- Codegen emits forward declarations for non-main functions so
+  mutually-referential definitions compile regardless of source
+  order; main narrows its i64 return to int via explicit cast.
+- Driver pipeline now runs Check between the HIR bridge and MIR
+  lowering. Failing type-check diagnostics surface through the
+  driver's error return with the stage name "type checking".
+- Resolver: single-segment type paths are now tolerated silently,
+  since they may be generic parameters (`T`) the bridge registers.
+- HIR bridge: added a generic-scope so `fn id[T](x: T)` types
+  each bare `T` as a KindGenericParam TypeId; FieldExpr chains
+  that the resolver bound to a module-qualified item now lower
+  to a single PathExpr carrying the resolved symbol.
 
 Rescheduled: (none this wave)

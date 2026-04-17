@@ -1683,3 +1683,194 @@ grep "WC005" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64, go1.22+, MinGW
 gcc 13.x). CI matrix green on the committed SHA is the authoritative
 record.
+
+### WC006 — Wave 06 Closure
+
+Wave 06 (Type Checking) completed 2026-04-17. The `compiler/check/`
+package is now the retirement site of the W00-declared Type-checker
+stub. It runs between the HIR bridge and the MIR lowerer; every
+KindInfer TypeId the bridge left behind is either resolved to a
+concrete TypeId or blocked by a diagnostic before lowering sees it
+(L013 defense).
+
+**Scope landed**:
+
+- `compiler/check/` — full two-pass type checker. Pass 1
+  (collectItems + registerImplBlocks + checkItemShapes +
+  checkAssociatedTypesCoverage) indexes every fn signature,
+  trait, impl, and union/newtype declaration so bodies can
+  reference items in any order (W06-P01-T02). Pass 2
+  (checkBodies) walks each fn body with contextual inference:
+  literals pick their concrete type from the enclosing context,
+  defaulting to I32 (int) and F64 (float) when no hint applies.
+- Nominal identity is enforced through the TypeTable
+  (reference §2.8 — (name, defining-symbol) pair); the checker
+  rejects assignments where the declared and actual types
+  differ and don't widen under the numeric lattice. Numeric
+  widening follows §5.8: signed and unsigned integer families
+  each have their own lattice (I8 to ISize; U8 to USize), and
+  F32 widens to F64. Cross-sign widening requires an explicit
+  `as` cast.
+- `as` cast semantics (§28.1): permitted between numeric
+  primitives, between pointer types, and between integers and
+  pointers. Anything else — including `Bool as I32` — is a
+  diagnostic.
+- Trait resolution: `impl Trait for Type` blocks register into
+  a coherenceKey map keyed by (Trait, Target). A second impl of
+  the same (Trait, Target) pair is a "conflicting impls"
+  diagnostic. The orphan rule (§12.7) requires an impl to live
+  in the module that defines either the trait or the target;
+  primitives have no declaring module, so only the trait's
+  module may impl for them.
+- Bound-chain lookup: a method call on a generic `T` with a
+  `T: Trait` bound consults the fn's GenericParam.Bounds list
+  to find the trait whose method is being invoked.
+- Contextual inference: `let x: I64 = 7;` types the literal
+  as I64 (hinted from the declared type); `return 7` in a fn
+  returning I32 types it I32. Range-checking catches
+  `let x: I8 = 300;` as "integer literal does not fit in I8".
+- Associated-type coverage: an `impl Trait for Type` whose
+  trait declares associated-type names must provide a concrete
+  type for each. Missing coverage is a diagnostic.
+- Function-pointer types: `fn(A, B) -> R` is a first-class
+  TypeTable type; two signatures with the same params/return
+  share a TypeId (exercised via the TypeTable's structural
+  interning).
+- `impl Trait` parameter-position: desugared to `fn f[T: Trait]
+  (x: T)` by the bridge; the checker sees a normal generic and
+  types it accordingly.
+- `impl Trait` return-position: the checker walks the body's
+  return statements, collects the TypeIds yielded, and reports
+  a diagnostic if more than one concrete type appears
+  (reference §56.1).
+- Union (§49.1) field validation: fields must be primitives or
+  pointers at W06; struct-typed fields are rejected as a
+  "non-trivial type" diagnostic, deferring full Drop-trait
+  integration to the wave that lands Drop.
+- Newtype pattern: `struct U(T);` produces a distinct nominal
+  TypeId — the W04 TypeTable already guaranteed this via the
+  defining-symbol rule; W06 confirms it in
+  `TestNewtypePattern`.
+- `@repr`/`@align` validation: `CheckRepr` rejects `@repr(C)`
+  paired with `@repr(packed)` (mutually exclusive), integer
+  reprs on non-enum types, non-power-of-two `@align`, and
+  unsupported integer widths (only 8/16/32/64).
+- Variadic extern: `extern fn printf(fmt: Ptr[U8], ...) -> I32`
+  is accepted; a non-extern Fuse fn with `...` is diagnosed.
+
+**Non-retiring extensions (supporting the proof program)**:
+
+- `compiler/mir/`: added `OpParam` (read parameter by index)
+  and `OpCall` (direct fn call). `Function.NumParams` tracks
+  the parameter count; `Validate` enforces that calls name a
+  target and use defined arg registers.
+- `compiler/lower/`: supports multi-fn programs, parameter
+  reads, and direct fn calls whose callee is a single-segment
+  PathExpr. Generic fn bodies and most advanced expressions
+  still produce diagnostics.
+- `compiler/codegen/c11.go`: emits forward declarations for
+  every non-main fn so mutually-referential definitions
+  compile regardless of order; functions with parameters
+  declare `int64_t p0, p1, ...` signatures. Opcodes `OpParam`
+  and `OpCall` emit direct C param reads and C function calls.
+- `compiler/driver/`: runs Check between the HIR bridge and
+  MIR lowering. Failing checks surface with stage name "type
+  checking" so callers can attribute diagnostics to the right
+  phase.
+- `compiler/resolve/` (small fix): single-segment unresolved
+  type paths are silent — they might be generic parameters
+  that the bridge registers at item entry.
+- `compiler/hir/bridge.go`: per-item generic scope maps a bare
+  `T` to its KindGenericParam TypeId; FieldExpr chains the
+  resolver already bound to a module-qualified symbol lower to
+  a single PathExpr so the checker's inferPath consults the
+  item's TypeId directly.
+
+**Notable design choices**:
+
+- The checker mutates HIR Typed nodes in place. The W04
+  contract was that HIR carries its own TypeIds; the checker
+  makes them authoritative by replacing KindInfer with
+  concrete TypeIds. Tests use `RunNoUnknownCheck` to verify
+  the invariant.
+- Coherence conflicts are only reported for trait impls, not
+  for inherent impls: two `impl T { ... }` blocks for the
+  same T are how users split methods across files, not a
+  conflict.
+- The orphan rule accepts a primitive target when the impl
+  lives in the trait's module. Primitives have no declaring
+  module, so there's no alternative anchor.
+- `TestReprAnnotationCheck` tests `CheckRepr` as a pure
+  function; wiring it to actual HIR item decorators is a
+  separate path the W04 bridge already retained in AST form.
+  At W06 the tests exercise the validation logic directly so
+  future waves can attach it to item-level attributes without
+  rewriting the predicate.
+- Literal range-checking fires only when the literal's text
+  is a pure decimal integer. Hex/octal/binary literals and
+  negation through UnaryExpr(UnNeg) are accepted without the
+  range check at W06; full const-evaluation arrives in W14.
+
+**Lessons captured**:
+
+- Generic-parameter visibility must be a bridge-level concern
+  because the resolver does not (and cannot) know the set of
+  generics an item introduces without parsing generics' scope.
+  Adding a per-item `genericScope` to the bridge let
+  `fn id[T](x: T)` type its parameter correctly without
+  cross-cutting changes to resolve.
+- Paths like `std.id(42)` are parsed as FieldExpr chains, not
+  multi-segment PathExprs. The checker's `inferPath` would
+  have to flatten on every call if the bridge did not do it
+  once; pushing the flatten into the bridge keeps the checker
+  simple and fixes the "std is unresolved" false positive in
+  TestStdlibBodyChecking.
+- Keeping `Unknown` out of the TypeTable entirely (only
+  KindInfer, with an explicit "pending inference" semantic)
+  made the invariant walker trivial: any `KindInfer` after
+  check is a compiler bug. No subtle "is Unknown a
+  user-facing value?" semantics to debate.
+- The W05 diagnostics around `fn main` with parameters were
+  tightly coupled to the CLI test. Relaxing to accept either
+  the W05-era lowerer message or the W06 checker message kept
+  the CLI test stable across the scope extension.
+
+**Proof surface**:
+
+- `TestFunctionTypeRegistration`, `TestTwoPassChecker`
+- `TestNominalEquality`, `TestPrimitiveMethods`
+- `TestNumericWidening` (widen-i32-to-i64, narrowing-requires-cast)
+- `TestCastSemantics` (numeric-to-numeric-ok, bool-to-i32-rejected)
+- `TestConcreteTraitMethodLookup`, `TestTraitBoundLookup`
+  (concrete + bound-chain sub-cases), `TestBoundChainLookup`
+- `TestCoherenceOrphan` (conflicting-impls, orphan-rule)
+- `TestTraitParameters`
+- `TestContextualInference`, `TestZeroArgTypeArgs`, `TestLiteralTyping`
+- `TestAssocTypeProjection`, `TestAssocTypeConstraints`
+- `TestFnPointerType`, `TestImplTraitParam`, `TestImplTraitReturn`
+- `TestUnionCheck` (primitive-fields-ok, non-trivial-field-rejected)
+- `TestNewtypePattern`
+- `TestReprAnnotationCheck` (8 sub-cases)
+- `TestVariadicExternCheck` (extern-ok, non-extern-rejected)
+- `TestStdlibBodyChecking`, `TestNoUnknownAfterCheck`
+- `TestCheckerBasicProof` (e2e: `checker_basic.fuse` exits 42)
+
+**Verification**:
+```
+go test ./compiler/check/... -v
+go test ./compiler/check/... -run TestNoUnknownAfterCheck -v
+go test ./compiler/check/... -run TestStdlibBodyChecking -v
+go test ./compiler/check/... -run TestTraitBoundLookup -v
+go test ./compiler/check/... -run TestCoherenceOrphan -v
+go test ./compiler/check/... -run TestAssocTypeProjection -v
+go test ./compiler/check/... -run TestCastSemantics -v
+go test ./compiler/check/... -run TestReprAnnotationCheck -v
+go test ./tests/e2e/... -run TestCheckerBasicProof -v
+go run tools/checkstubs/main.go -wave W06 -phase P00
+go run tools/checkstubs/main.go -wave W06
+go run tools/checkstubs/main.go -history-current-wave W06
+grep "WC006" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+, MinGW
+gcc 13.x). CI matrix green on the committed SHA is the authoritative
+record.

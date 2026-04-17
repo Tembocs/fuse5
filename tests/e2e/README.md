@@ -22,6 +22,7 @@ Go test that executes it.
 |---|---|---|---|---|
 | `hello_exit.fuse` | W05 | `0` | (empty) | `TestHelloExit` in `tests/e2e/spine_test.go` |
 | `exit_with_value.fuse` | W05 | `42` | (empty) | `TestExitWithValue` in `tests/e2e/spine_test.go` |
+| `checker_basic.fuse` | W06 | `42` | (empty) | `TestCheckerBasicProof` in `tests/e2e/spine_test.go` |
 
 ## Contract
 

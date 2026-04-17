@@ -37,6 +37,20 @@ func TestExitWithValue(t *testing.T) {
 	}
 }
 
+// TestCheckerBasicProof is the W06-P09-T01 Verify target.
+// `checker_basic.fuse` exercises a multi-fn program with typed
+// parameters, integer arithmetic in a callee, and a direct call
+// from main — the whole pipeline must agree on types for the
+// binary to exit 42.
+func TestCheckerBasicProof(t *testing.T) {
+	skipIfNoCC(t)
+	result := mustBuild(t, "checker_basic.fuse")
+	exit := mustRun(t, result.BinaryPath)
+	if exit != 42 {
+		t.Fatalf("checker_basic exit = %d, want 42", exit)
+	}
+}
+
 // mustBuild invokes the Stage 1 driver on the named proof program.
 // The binary lives under the test's temporary directory so parallel
 // test runs don't collide.

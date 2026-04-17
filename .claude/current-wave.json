@@ -1,6 +1,6 @@
 {
-  "current_wave": "W05",
+  "current_wave": "W06",
   "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Minimal End-to-End Spine wave in closure phase. Spine stub retired: minimal MIR (const-int + add/sub/mul/div/mod + return), HIR-to-MIR lowerer with diagnostics on non-spine forms, deterministic C11 codegen, host cc detection (GCC/Clang/MSVC), runtime header + abort.c, end-to-end driver `fuse build`, and the `build` subcommand. Proof programs `hello_exit.fuse` (exit 0) and `exit_with_value.fuse` (exit 42 via `6 * 7`) compile and run. STUBS.md W05 history block appended; WC005 logged. All 9 wave-spec Verify commands pass; full `go test ./...` green. Next: commit W05 closure and enter W06 Type Checking."
+  "notes": "Type Checking wave in closure phase. Type checker stub retired: two-pass checker, nominal identity per §2.8, numeric widening lattice, `as` cast semantics, trait resolution with coherence+orphan rules, bound-chain lookup, associated-type coverage, contextual inference (literal types default or hint-driven), fn pointer types, impl Trait param/return, union field validation, newtype distinctness, @repr/@align validation, variadic extern checks. No KindInfer survives checking (L013). Driver now runs Check between HIR bridge and MIR lowering. MIR/lowerer/codegen extended with OpParam/OpCall for multi-fn programs. Proof program `checker_basic.fuse` compiles via full pipeline and exits 42. STUBS.md W06 history block appended; WC006 logged. All wave-spec Verify commands pass; full `go test ./...` green. Next: commit W06 closure and enter W07 Concurrency Semantics."
 }

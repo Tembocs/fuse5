@@ -52,8 +52,11 @@ func TestMinimalCli(t *testing.T) {
 		if code == 0 {
 			t.Fatalf("fuse build on invalid source should fail")
 		}
-		if !strings.Contains(stderr.String(), "only lowers integer literals") &&
-			!strings.Contains(stderr.String(), "integer") {
+		// The W06 checker now catches `return true` in an I32-typed
+		// fn before the lowerer does; earlier waves saw the lower
+		// diagnostic instead. Accept either surface wording.
+		if !strings.Contains(stderr.String(), "does not match fn return") &&
+			!strings.Contains(stderr.String(), "only lowers integer literals") {
 			t.Errorf("stderr missing expected diagnostic: %q", stderr.String())
 		}
 	})

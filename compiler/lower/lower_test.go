@@ -81,9 +81,13 @@ func TestMinimalLowerIntReturn_Rejects(t *testing.T) {
 		src     string
 		wantMsg string
 	}{
-		{"parameters",
-			`fn main(x: I32) -> I32 { return x; }`,
-			"does not yet lower fn parameters"},
+		{"match-expr",
+			`fn main() -> I32 {
+				return match 1 {
+					_ => 0,
+				};
+			}`,
+			"does not yet lower"},
 		{"multiple-statements",
 			`fn main() -> I32 {
 				let a: I32 = 1;

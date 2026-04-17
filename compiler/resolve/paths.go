@@ -322,10 +322,12 @@ func (r *resolver) resolvePathExpr(m *Module, p *ast.PathExpr) {
 	}
 }
 
-// resolvePathType resolves a type path. Unlike expression paths, bare
-// single-segment type names MUST resolve (types do not have "local
-// bindings" in the same sense as values). Unresolved type paths emit
-// a diagnostic.
+// resolvePathType resolves a type path. Primitive names and
+// single-segment non-primitive names (which may be generic params
+// introduced by an enclosing fn/impl) are tolerated silently; the
+// type checker in W06 is responsible for the final "is this really
+// a type" judgment. Multi-segment type paths (`mod.Type`) are
+// strict because they can only refer to module-qualified items.
 func (r *resolver) resolvePathType(m *Module, t *ast.PathType) {
 	if len(t.Segments) == 0 {
 		return
@@ -335,7 +337,9 @@ func (r *resolver) resolvePathType(m *Module, t *ast.PathType) {
 	if len(t.Segments) == 1 && isPrimitiveTypeName(t.Segments[0].Name) {
 		return
 	}
-	id := r.resolvePath(m, t.Segments, t.NodeSpan(), false)
+	// Single-segment user type names may be generic parameters that
+	// the checker tracks; stay silent on a miss so generics work.
+	id := r.resolvePath(m, t.Segments, t.NodeSpan(), true)
 	if id != NoSymbol {
 		r.recordBinding(m.Path, t.NodeSpan(), id)
 	}

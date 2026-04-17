@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Tembocs/fuse5/compiler/cc"
+	"github.com/Tembocs/fuse5/compiler/check"
 	"github.com/Tembocs/fuse5/compiler/codegen"
 	"github.com/Tembocs/fuse5/compiler/hir"
 	"github.com/Tembocs/fuse5/compiler/lex"
@@ -79,6 +80,13 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 	prog, bridgeDiags := hir.NewBridge(tab, resolved, sources).Run()
 	if len(bridgeDiags) != 0 {
 		return nil, bridgeDiags, fmt.Errorf("HIR bridge failed")
+	}
+
+	// Type-check (W06). The checker mutates prog in place,
+	// replacing KindInfer TypeIds with concrete types; downstream
+	// lowering consults those via TypeOf() without a side table.
+	if checkDiags := check.Check(prog); len(checkDiags) != 0 {
+		return nil, checkDiags, fmt.Errorf("type checking failed")
 	}
 
 	// Lower to MIR.
