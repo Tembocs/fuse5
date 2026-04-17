@@ -67,8 +67,10 @@ report; no later section matters until these are clean.
       `go run tools/checkstubs/main.go -history-current-wave Wxx`.
 - [ ] **A4. No stub is overdue.**
       Run `go run tools/checkstubs/main.go -wave Wxx -phase P00`.
-      A stub is overdue if its retiring wave ≤ the current wave and
-      it is still in the Active table. (Rule 6.15.)
+      A stub is overdue if its retiring wave < the current wave and
+      it is still in the Active table. A stub whose retiring wave equals
+      the current wave is not overdue at P00; the wave's PCL retires it.
+      (Rule 6.15.)
 - [ ] **A5. A `WCxxx` entry exists in `docs/learning-log.md`.**
       It has all five required fields: proof programs added, stubs
       retired, stubs introduced, what was harder than planned, what

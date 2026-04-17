@@ -311,7 +311,7 @@ func checkWave(p *Parsed, wave, phase string) error {
 	if phase == "P00" {
 		cur := waveOrder(wave)
 		for _, s := range p.Active {
-			if waveOrder(s.RetiringWave) <= cur {
+			if waveOrder(s.RetiringWave) < cur {
 				return fmt.Errorf("overdue stub blocking wave entry (Rule 6.15): %q retires %s but wave %s is entering",
 					s.Name, s.RetiringWave, wave)
 			}

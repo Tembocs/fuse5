@@ -834,6 +834,80 @@ This entry is verified when Wave 17 Phase 05 Task 01 passes: the proof program
 `fn identity[T](x: T) -> T { return x; } fn main() -> I32 { return identity[I32](42); }`
 compiles, runs, and exits with code 42.
 
+### L016 — Overdue-stub rule off-by-one blocked every wave entry
+
+Date: 2026-04-17
+Discovered during: Wave 01 / Phase 00 / Task 01
+
+**Reproducer**:
+At W01 Phase 00, running the wave's own Verify command
+`go run tools/checkstubs/main.go -wave W01 -phase P00` reported the lexer
+stub as overdue and exited non-zero, blocking the wave from starting. The
+same shape would have blocked every subsequent wave entry.
+
+**What was tried first**:
+Reading the tool's behavior literally: it compared
+`waveOrder(s.RetiringWave) <= cur` and flagged the lexer stub (retiring
+W01) as overdue when entering W01. The first instinct was to suspect the
+stub table, but the stub was correctly scheduled.
+
+**Root cause**:
+Rule 6.15 defined "overdue" as retiring wave *less than or equal to* the
+current wave. The tool faithfully implemented that wording. But the phase
+model (Rule 6.14, `docs/phase-model.md`) schedules stub retirement to
+happen at the wave's PCL, after Phase 00 — so a stub retiring in W01 is
+not overdue when W01 begins, it is exactly on schedule. The correct
+relation is *strictly less than*. `<=` collapses on-schedule and overdue
+into the same state, making every wave unstartable once any stub was
+scheduled to retire in it. W00 didn't trip this because W00's seeded
+stubs all retire in later waves and W00 uses the `-audit-seed` codepath,
+which bypasses the overdue comparison.
+
+**Spec gap**:
+Rule 6.15's wording did not match the phase model. The language reference
+was unaffected; this was a governance-rule defect, not a language-spec
+defect.
+
+**Plan gap**:
+The W00 Verify exercised `-audit-seed`, not `-wave -phase P00`, so the
+first use of the overdue comparison was W01's own Verify — after the rule
+and tool had already shipped and been signed off as "CI green."
+
+**Fix**:
+- `tools/checkstubs/main.go` `checkWave`: change `<=` to `<` in the P00
+  branch.
+- `docs/rules.md` §6.15: reword to "strictly less than the current wave"
+  and explicitly note that a stub whose retiring wave equals the current
+  wave is not overdue at P00.
+- `docs/audit.md` A4: mirror the reworded rule.
+- `tools/checkstubs/stubs_test.go`: add `TestCheckWaveSameWaveNotOverdue`
+  as a regression test so any future reintroduction of the off-by-one
+  fails CI.
+
+**Cascading effects**:
+None to earlier waves — W00 never exercised this path. Future waves now
+pass Phase 00 as intended. The regression test hardens the check so the
+two forms of "overdue" (strictly-before vs. on-or-before) cannot silently
+diverge between tool and rule again.
+
+**Architectural lesson**:
+A governance rule whose first real exercise is the wave *after* the rule
+ships is effectively unverified. Governance tools should be exercised
+against a realistic stub table (one containing a stub that retires in
+the entered wave) before the rule that depends on them is treated as
+validated. More generally: CI green on a tool does not mean the rule
+behind it is correct — the rule is only validated when the tool runs
+against data shaped like the rule's intended use.
+
+**Verification**:
+```
+go test ./tools/checkstubs/... -v
+go run tools/checkstubs/main.go -wave W01 -phase P00
+```
+The first now includes `TestCheckWaveSameWaveNotOverdue` which fails if
+`<=` is ever reintroduced. The second now exits 0 when the lexer stub is
+still present but retires W01.
+
 ### WC000 — Wave 00 Closure
 
 Date: 2026-04-16

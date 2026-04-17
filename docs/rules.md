@@ -296,8 +296,11 @@ completed the wave.
 ### Rule 6.15 — Overdue stubs block wave entry.
 
 Phase 00 of every wave must inspect `STUBS.md` for overdue rows. A stub is
-overdue when its `Retiring wave` column names a wave less than or equal to
-the current wave and the stub has not yet been retired. If any overdue stub
+overdue when its `Retiring wave` column names a wave strictly less than the
+current wave and the stub has not yet been retired. Stubs whose retiring
+wave equals the current wave are not overdue at Phase 00 — the current wave
+is, by definition, the wave scheduled to retire them, and the retirement
+work lands during the wave (PCL, per Rule 6.16). If any overdue stub
 exists, the wave cannot begin until every overdue stub is either retired or
 the plan is explicitly revised to reschedule it, with the reschedule reason
 recorded in the stub history log (Rule 6.16).

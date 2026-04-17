@@ -98,6 +98,16 @@ func TestCheckWaveOverdue(t *testing.T) {
 	}
 }
 
+func TestCheckWaveSameWaveNotOverdue(t *testing.T) {
+	// Lexer retires in W01. Entering W01 P00 is the moment the wave's own
+	// retirement work begins, so the stub must not be flagged as overdue.
+	// (L016: earlier tool used `<=`, which made every wave unstartable.)
+	p, _ := Parse(strings.NewReader(seedExample))
+	if err := checkWave(p, "W01", "P00"); err != nil {
+		t.Fatalf("stub retiring in entered wave must not be overdue: %v", err)
+	}
+}
+
 func TestCheckHistoryWave(t *testing.T) {
 	hist := `## Active stubs
 
