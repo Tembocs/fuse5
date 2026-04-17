@@ -231,6 +231,8 @@ func (l *lowerer) lowerExpr(modPath string, b *mir.Builder, e hir.Expr, params m
 		return b.Call(cName(modPath, callee.Segments[0]), argRegs), true
 	case *hir.MatchExpr:
 		return l.lowerMatch(modPath, b, x, params)
+	case *hir.TryExpr:
+		return l.lowerTry(modPath, b, x, params)
 	default:
 		l.diagnose(e.NodeSpan(),
 			fmt.Sprintf("spine does not yet lower %T", e),
@@ -532,6 +534,89 @@ func orIsTotal(p *hir.OrPat) bool {
 		}
 	}
 	return seenTrue && seenFalse
+}
+
+// lowerTry lowers a `?` expression to branch-and-early-return.
+//
+// Shape (for `e?` where e has enum type EnumT with an `Err` or
+// `None` variant at declared index K):
+//
+//   - Compute `e` into a register R.
+//   - If R == K, early-return R from the enclosing fn (this is
+//     the "propagate the error" path).
+//   - Otherwise, continue with R as the `?` expression's value.
+//
+// The lowerer leaves the continuation-block open so the
+// surrounding expression can use the register. The `?` result
+// register is R itself — no payload extraction at W11 because
+// enum variants don't yet carry payloads through the pipeline.
+// Reference §16 and the wave-doc proof shape: `run(false)`
+// propagates Err and the enclosing fn returns Err (exit 43),
+// while `run(true)` continues with Ok (exit 0).
+func (l *lowerer) lowerTry(modPath string, b *mir.Builder, x *hir.TryExpr, params map[string]mir.Reg) (mir.Reg, bool) {
+	if x.Receiver == nil {
+		l.diagnose(x.NodeSpan(),
+			"`?` with no receiver expression",
+			"this is a bridge bug, not a user error")
+		return mir.NoReg, false
+	}
+	recv, ok := l.lowerExpr(modPath, b, x.Receiver, params)
+	if !ok {
+		return mir.NoReg, false
+	}
+	recvType := x.Receiver.TypeOf()
+	errIdx, ok := l.errorVariantIndex(recvType)
+	if !ok {
+		l.diagnose(x.NodeSpan(),
+			"`?` receiver's enum has no `Err` / `None` variant",
+			"declare the error case as `Err` or `None`; the checker normally catches this earlier")
+		return mir.NoReg, false
+	}
+	// Allocate a block for early-return (the Err/None arm) and a
+	// block for the continuation (the success arm). The current
+	// block then ends with TermIfEq.
+	errBlock := b.BeginBlock()
+	okBlock := b.BeginBlock()
+	// Re-enter the block that holds `recv` to emit the branch.
+	// The block immediately preceding errBlock is the one where
+	// we computed recv.
+	recvBlock := errBlock - 1
+	b.UseBlock(recvBlock)
+	b.IfEq(recv, int64(errIdx), errBlock, okBlock)
+	// Err arm: return the receiver unchanged (propagate the error).
+	b.UseBlock(errBlock)
+	b.Return(recv)
+	// Success arm: the caller continues emission in okBlock with
+	// `recv` as the `?` expression's value.
+	b.UseBlock(okBlock)
+	return recv, true
+}
+
+// errorVariantIndex returns the 0-based index of the `Err` or
+// `None` variant within the enum that `enumType` names. Returns
+// ok=false when enumType is not an enum or the enum has neither
+// variant.
+func (l *lowerer) errorVariantIndex(enumType typetable.TypeId) (int, bool) {
+	t := l.prog.Types.Get(enumType)
+	if t == nil || t.Kind != typetable.KindEnum {
+		return 0, false
+	}
+	for _, modPath := range l.prog.Order {
+		m := l.prog.Modules[modPath]
+		for _, it := range m.Items {
+			ed, ok := it.(*hir.EnumDecl)
+			if !ok || ed.TypeID != enumType {
+				continue
+			}
+			for idx, v := range ed.Variants {
+				if v.Name == "Err" || v.Name == "None" {
+					return idx, true
+				}
+			}
+			return 0, false
+		}
+	}
+	return 0, false
 }
 
 // lookupEnumVariantByName scans every enum declaration in the

@@ -1,0 +1,30 @@
+// error_propagation_ok.fuse — W11-P03-T01 proof (success path).
+//
+// Companion to `error_propagation_err.fuse`. `run(true)` returns
+// Ok via `?` (the `?` continues past the Err check) and main
+// maps Ok → exit 0.
+//
+// Expected exit code: 0.
+
+enum Status {
+    Ok,
+    Err,
+}
+
+fn check(b: Bool) -> Status {
+    return match b {
+        true => Status.Ok,
+        false => Status.Err,
+    };
+}
+
+fn run(b: Bool) -> Status {
+    return check(b)?;
+}
+
+fn main() -> I32 {
+    return match run(true) {
+        Status.Ok => 0,
+        Status.Err => 43,
+    };
+}

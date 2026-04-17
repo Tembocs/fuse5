@@ -1,0 +1,30 @@
+// error_propagation_err.fuse — W11-P03-T01 proof (error path).
+//
+// Demonstrates `?` on a Result-shaped enum. `run(false)` returns
+// Err via `?`, and main maps Err → exit 43. The Ok case would
+// produce exit 0; see `error_propagation_ok.fuse`.
+//
+// Expected exit code: 43.
+
+enum Status {
+    Ok,
+    Err,
+}
+
+fn check(b: Bool) -> Status {
+    return match b {
+        true => Status.Ok,
+        false => Status.Err,
+    };
+}
+
+fn run(b: Bool) -> Status {
+    return check(b)?;
+}
+
+fn main() -> I32 {
+    return match run(false) {
+        Status.Ok => 0,
+        Status.Err => 43,
+    };
+}

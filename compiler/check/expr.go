@@ -76,13 +76,72 @@ func (c *checker) inferExpr(modPath string, scope *bodyScope, e hir.Expr, expect
 		return c.checkBlock(modPath, scope, x.Body, expected)
 	case *hir.MatchExpr:
 		return c.inferMatch(modPath, scope, x, expected)
+	case *hir.TryExpr:
+		return c.inferTry(modPath, scope, x)
 	}
 	// Fallback for expressions W06 does not yet type (loops,
-	// closures, spawn, try, index-range). The downstream wave that
+	// closures, spawn, index-range). The downstream wave that
 	// lowers them is responsible for the actual typing; leaving
 	// them as Infer here is the explicit "W06 doesn't touch this"
 	// signal, not an Unknown default.
 	return c.tab.Infer()
+}
+
+// inferTry types a `?` (TryExpr). W11 contract: `e?` where e is
+// a nominal enum with an error variant named `Err` or `None`;
+// the enclosing fn's return type must match the receiver's
+// enum so the early-return typechecks. The `?` expression's
+// own type is the receiver's type — for payloadless enums the
+// "extraction" is a no-op because there's no inner T to
+// extract; W14+ will extend this when enum variants carry
+// payloads end-to-end.
+func (c *checker) inferTry(modPath string, scope *bodyScope, x *hir.TryExpr) typetable.TypeId {
+	recvType := c.checkExpr(modPath, scope, x.Receiver, typetable.NoType)
+	t := c.tab.Get(recvType)
+	if t == nil {
+		return c.tab.Infer()
+	}
+	if t.Kind != typetable.KindEnum {
+		c.diagnose(x.Span,
+			fmt.Sprintf("`?` requires an enum scrutinee (Result or Option); got %s",
+				c.typeName(recvType)),
+			"use `?` on an expression producing Result[T, E] or Option[T], or pattern-match instead")
+		return c.tab.Infer()
+	}
+	if !c.enumHasErrorVariant(recvType) {
+		c.diagnose(x.Span,
+			fmt.Sprintf("`?` on enum %q has no `Err` or `None` variant; the enum must model a success/failure shape",
+				t.Name),
+			"declare the error case as `Err` (Result-shaped) or `None` (Option-shaped)")
+		return c.tab.Infer()
+	}
+	// Enclosing fn must have the same return type so the
+	// early-return typechecks. At W11 we enforce equality; future
+	// waves can relax this to an `Into`-style coercion.
+	if scope.retType != typetable.NoType && scope.retType != recvType {
+		c.diagnose(x.Span,
+			fmt.Sprintf("`?` on %s requires the enclosing fn to also return %s; got return type %s",
+				c.typeName(recvType), c.typeName(recvType), c.typeName(scope.retType)),
+			"align the fn's return type with the `?` scrutinee")
+		return recvType
+	}
+	return recvType
+}
+
+// enumHasErrorVariant returns true when the enum declared for
+// tid carries a variant named `Err` or `None` — the W11 marker
+// for "this enum is usable with `?`".
+func (c *checker) enumHasErrorVariant(tid typetable.TypeId) bool {
+	decl := c.enumDeclForType(tid)
+	if decl == nil {
+		return false
+	}
+	for _, v := range decl.Variants {
+		if v.Name == "Err" || v.Name == "None" {
+			return true
+		}
+	}
+	return false
 }
 
 // inferMatch types a match expression and runs W10 exhaustiveness
