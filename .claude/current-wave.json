@@ -1,6 +1,6 @@
 {
   "current_wave": "W07",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Concurrency Semantics wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W07 -phase P00` exits 0: no overdue stubs, Concurrency checker row remains Active with retiring wave W07, ThreadHandle and Channel type kinds (pre-seeded at W04) available via typetable. STUBS.md Active-row descriptions were refreshed at 14a15d4 (W05→W06 cleanup); no further refresh required here. Next: implementation commit(s) for marker traits (Send/Sync/Copy), Chan[T] typecheck, spawn->ThreadHandle[T] typing with Send-on-capture bound, @rank lock ordering, and the TestConcurrencyRejections e2e proof."
+  "notes": "Concurrency Semantics wave in closure phase. Concurrency-checker stub retired: marker traits (Send/Sync/Copy) with auto-impl and negative impls, Chan[T] typing with Send-on-element bound, spawn → ThreadHandle[T] typing with move-capture requirement, Shared[T] = Send+Sync, @rank strict-increasing enforcement. STUBS.md W07 history block appended; WC007 logged using the Rule 10.2 mandated 5-field template. All wave-spec Verify commands pass; full `go test ./...` green. This is also the first wave to follow Rule 9.5 three-commit discipline: P00 audit (21e96e7), implementation (ac7bc81), PCL (this commit). Runtime lowering for spawn/Chan remains W16 work. Next: commit W07 PCL and enter W08 Monomorphization."
 }

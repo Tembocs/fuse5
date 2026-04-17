@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Concurrency checker (Send/Sync/Chan/spawn/@rank) | compiler/check/ (W06 type checker only; no concurrency enforcement) | spawn/Chan/@rank use is untyped at W06 | "concurrency checker not yet implemented" | W07 |
 | Monomorphization | compiler/monomorph/ (empty) | no generic specialization | "monomorphization not yet implemented" | W08 |
 | Ownership, liveness, borrow rules, drop codegen | compiler/liveness/ (empty) | no ownership enforcement | "ownership/liveness not yet implemented" | W09 |
 | Pattern matching dispatch and exhaustiveness | compiler/check/ (W06 type checker only; no match dispatch/exhaustiveness) | match arms type-check but exhaustiveness is not enforced | "pattern matching not yet implemented" | W10 |
@@ -282,5 +281,31 @@ Additionally extended (non-retiring-this-wave):
   each bare `T` as a KindGenericParam TypeId; FieldExpr chains
   that the resolver bound to a module-qualified item now lower
   to a single PathExpr carrying the resolved symbol.
+
+Rescheduled: (none this wave)
+
+### W07 — Concurrency Semantics
+
+Added: (none this wave)
+
+Retired:
+- Concurrency checker, Send/Sync/Chan/spawn/@rank (compiler/check/concurrency.go,
+  compiler/check/concurrency_test.go, tests/e2e/concurrency_rejections_test.go) —
+  confirmed retired by `go test ./compiler/check/... -v` and each wave-spec
+  Verify command. Proof surface: `TestMarkerTraitDeclarations`,
+  `TestMarkerAutoImpl` (every primitive Send+Sync+Copy, tuple
+  composition, refs excluded from Send/Copy, Chan/ThreadHandle Send),
+  `TestNegativeImpl` (negative impl blocks auto-impl without leaking
+  to other markers), `TestChannelTypecheck`, `TestChannelSendBound`,
+  `TestSpawnHandleTyping` (ThreadHandle[T] identity),
+  `TestSpawnSendBound` (non-move closure rejected with §47.1 text +
+  `move`-suggestion per Rule 6.17), `TestSharedBounds`
+  (Send+Sync lattice), `TestSpawnRejectsNonEscaping`,
+  `TestLockRankingEnforcement` (positive/zero/negative rank,
+  strict/equal/decreasing sequences), `TestSendSyncMarkerTraits`
+  umbrella, and e2e `TestConcurrencyRejections` (non-move closure at
+  spawn, non-Send return at spawn, lock-rank violation, invalid @rank
+  value). Runtime lowering for `spawn` and channel operations
+  remains stubbed — that's W16 work.
 
 Rescheduled: (none this wave)

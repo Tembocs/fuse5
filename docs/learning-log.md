@@ -1954,3 +1954,92 @@ grep "WC006" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64, go1.22+, MinGW
 gcc 13.x). CI matrix green on the committed SHA is the authoritative
 record.
+
+### WC007 — Wave 07 Closure
+
+Date: 2026-04-17
+Wave: 07 — Concurrency Semantics
+
+**Proof programs added this wave**:
+No new `.fuse` source file in `tests/e2e/`. The wave's rejection
+proof is `tests/e2e/concurrency_rejections_test.go` with four
+sub-cases asserting on specific diagnostic texts — the W07 rejection
+surface is asserted via synthetic HIR construction because the
+decorator-to-HIR propagation path for `@rank` and the
+source-to-spawn path for closure captures are both still maturing.
+Once those mature (decorators carry into HIR; the W09 escape
+classifier lands; the W16 runtime lowering wires spawn/Chan to
+real runtime calls), the same four rejections will move into full
+source-level proof fixtures. The rejection-test entry is recorded
+in `tests/e2e/README.md` with an explicit "N/A (test asserts
+diagnostics)" exit-code column so the registry stays honest.
+
+**Stubs retired this wave**:
+- Concurrency checker (Send/Sync/Chan/spawn/@rank) — removed from
+  `STUBS.md` Active table at the PCL commit of this wave. Confirmed
+  by `go run tools/checkstubs/main.go -wave W07 -retired "concurrency"`
+  and `go run tools/checkstubs/main.go -history-current-wave W07`,
+  both exiting 0. Proof surface is enumerated in the W07 block of
+  the `STUBS.md` Stub history.
+
+**Stubs introduced this wave**:
+None. W07 retires the concurrency-checker stub but does not add new
+stubs. Runtime-side lowering (spawn → thread runtime call, channel
+ops → runtime calls) remains scheduled for W16 under the existing
+"Runtime ABI" stub; no new Active row is needed because the
+existing row already covers it.
+
+**What was harder than planned**:
+- Negative impl syntax (`impl !Trait for T { }`) is not currently
+  parsed — the W02 parser accepts `impl Trait for T { }` only. The
+  W07 checker exposes `MarkNegativeImpl` as a programmatic
+  registration point so the auto-impl rules can be exercised and
+  unit-tested; wiring the `!` syntax end-to-end waits for a small
+  parser extension (future wave, not scheduled). This is the sole
+  scope concession from the wave-doc letter.
+- The spawn-Send-on-capture rule was implemented as "reject any
+  non-`move` closure at spawn" because the W09 escape classifier
+  (the DoD for T04) hasn't landed yet. The rule is stricter than
+  strictly necessary — a `move` closure with only primitive
+  captures is fine — so no soundness is lost; W09 will relax it to
+  the tighter "env struct must be Send" form.
+- The `@rank` structural check is validated against synthetic rank
+  sequences (`CheckRankOrder`) rather than by scanning decorator
+  attachments on HIR nodes, because the W04 HIR bridge doesn't
+  propagate decorators into HIR items yet. The predicate is the
+  single source of truth; future decorator-propagation work plugs
+  directly into it.
+
+**What the next wave must know**:
+- `check.IsSend`, `check.IsSync`, `check.IsCopy` are the public
+  marker-trait predicates. W08 monomorphization must consult them
+  when specialising generic bounds — a `T: Send` instantiation with
+  a non-Send concrete type is a diagnostic.
+- `check.MarkNegativeImpl` and `check.MarkPositiveImpl` are the
+  registration hooks. The W12 closure wave will call `MarkPositiveImpl`
+  on auto-generated closure environments whose captures are all Send.
+- `check.CheckRankOrder` is the single source of truth for lock
+  ordering. The W09 liveness wave will call it on the dynamic
+  lock-acquisition order it reconstructs from control-flow analysis.
+- The e2e test lives at `tests/e2e/concurrency_rejections_test.go`,
+  not alongside `spine_test.go`, because its assertions are on
+  diagnostic strings rather than binary exit codes.
+- The Concurrency checker row is gone from STUBS.md Active. The
+  Runtime-ABI row (W16) still carries the runtime-side obligations
+  for `spawn` and channel operations — W16 must consult this wave's
+  HIR and type-table integration when designing the runtime calls.
+
+**Verification**:
+```
+go test ./compiler/check/... -run TestSendSyncMarkerTraits -v
+go test ./compiler/check/... -run TestChannelTypecheck -v
+go test ./compiler/check/... -run TestSpawnHandleTyping -v
+go test ./compiler/check/... -run TestLockRankingEnforcement -v
+go test ./tests/e2e/... -run TestConcurrencyRejections -v
+go run tools/checkstubs/main.go -wave W07 -phase P00
+go run tools/checkstubs/main.go -wave W07
+go run tools/checkstubs/main.go -history-current-wave W07
+grep "WC007" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+).
+CI matrix green on the committed SHA is the authoritative record.
