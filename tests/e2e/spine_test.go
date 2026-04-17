@@ -77,17 +77,31 @@ func TestMultipleInstantiations(t *testing.T) {
 	}
 }
 
-// mustBuild invokes the Stage 1 driver on the named proof program.
-// The binary lives under the test's temporary directory so parallel
-// test runs don't collide.
+// mustBuild invokes the Stage 1 driver on the named proof
+// program. The produced binary's stem defaults to the source
+// stem — use mustBuildAs when a test needs a specific output
+// name (for instance, to dodge host-level heuristics that react
+// to the default name; see audit report 2026-04-17 13:05 for
+// the W10 finding that motivated mustBuildAs).
+// The binary lives under the test's temporary directory so
+// parallel test runs don't collide.
 func mustBuild(t *testing.T, sourceName string) *driver.BuildResult {
+	t.Helper()
+	return mustBuildAs(t, sourceName, trimExt(sourceName))
+}
+
+// mustBuildAs is mustBuild with an explicit output-binary stem.
+// Windows hosts occasionally trip Defender / SmartScreen / UAC
+// heuristics on certain executable names; tests that want to
+// avoid that pass a short, neutral stem like "mproof".
+func mustBuildAs(t *testing.T, sourceName, outputStem string) *driver.BuildResult {
 	t.Helper()
 	src, err := filepath.Abs(sourceName)
 	if err != nil {
 		t.Fatalf("abs %s: %v", sourceName, err)
 	}
 	dir := t.TempDir()
-	out := filepath.Join(dir, binaryName(trimExt(sourceName)))
+	out := filepath.Join(dir, binaryName(outputStem))
 	res, diags, err := driver.Build(driver.BuildOptions{
 		Source:  src,
 		Output:  out,
@@ -102,13 +116,33 @@ func mustBuild(t *testing.T, sourceName string) *driver.BuildResult {
 	return res
 }
 
-// mustRun executes the binary and returns its exit code. A zero
-// exit is reported as 0; a non-zero exit (including signal
-// termination on Unix) is returned numerically via ProcessState.
+// mustRun executes the binary and returns its exit code.
+//
+// Launch failures are surfaced explicitly via t.Fatalf. A process
+// that never starts (file-not-found, permission denied, UAC
+// elevation refusal, etc.) is a real test failure distinct from
+// a non-zero exit. Earlier versions of this helper discarded the
+// error and read ProcessState.ExitCode() unconditionally, which
+// let Windows launch failures masquerade as ambiguous exit codes
+// (audit report 2026-04-17 13:05, W10 finding G).
+//
+// A non-zero exit is NOT a helper-level failure — callers assert
+// on the returned value.
 func mustRun(t *testing.T, binPath string) int {
 	t.Helper()
 	cmd := exec.Command(binPath)
-	_ = cmd.Run() // non-zero exit is not a test failure by itself
+	err := cmd.Run()
+	if err != nil {
+		// *exec.ExitError means the process ran to completion
+		// and returned non-zero — that's a legal result for
+		// rejection-style proofs.
+		if _, isExit := err.(*exec.ExitError); !isExit {
+			t.Fatalf("launch %s: %v", binPath, err)
+		}
+	}
+	if cmd.ProcessState == nil {
+		t.Fatalf("launch %s: no ProcessState (the process never started)", binPath)
+	}
 	return cmd.ProcessState.ExitCode()
 }
 
