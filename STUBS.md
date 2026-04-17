@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Monomorphization | compiler/monomorph/ (empty) | no generic specialization | "monomorphization not yet implemented" | W08 |
 | Ownership, liveness, borrow rules, drop codegen | compiler/liveness/ (empty) | no ownership enforcement | "ownership/liveness not yet implemented" | W09 |
 | Pattern matching dispatch and exhaustiveness | compiler/check/ (W06 type checker only; no match dispatch/exhaustiveness) | match arms type-check but exhaustiveness is not enforced | "pattern matching not yet implemented" | W10 |
 | Error propagation (`?` operator) | compiler/lower/ (W05 spine only; no `?` lowering) | `?` operator emits a lowerer diagnostic | "error propagation not yet implemented" | W11 |
@@ -307,5 +306,31 @@ Retired:
   spawn, non-Send return at spawn, lock-rank violation, invalid @rank
   value). Runtime lowering for `spawn` and channel operations
   remains stubbed — that's W16 work.
+
+Rescheduled: (none this wave)
+
+### W08 — Monomorphization
+
+Added: (none this wave)
+
+Retired:
+- Monomorphization (compiler/monomorph/monomorph.go,
+  compiler/monomorph/monomorph_test.go, plus supporting
+  extensions in compiler/hir/bridge.go, compiler/hir/expr.go,
+  compiler/check/expr.go, compiler/driver/build.go) — confirmed
+  retired by `go test ./compiler/monomorph/... -v`,
+  `go test ./compiler/driver/... -run TestSpecializationInPipeline -v`,
+  and each wave-spec Verify command. Proof surface:
+  `TestGenericParamScoping` and `TestCallSiteTypeArgs` (check),
+  `TestBodyDuplication`, `TestSpecializedNames`,
+  `TestCallSiteRewrite`, `TestMonomorph_PartialInstantiation`
+  (monomorph), `TestInstantiationCollection`,
+  `TestPartialInstantiationRejected`,
+  `TestSpecializationInPipeline` (driver),
+  `TestGenericOriginalsSkipped`, `TestDistinctSpecializations`,
+  `TestSpecializedEnumTypes`, `TestGenericStructLayout` (codegen),
+  and e2e proofs `TestIdentityGeneric` (`identity_generic.fuse`
+  exit 42) + `TestMultipleInstantiations`
+  (`multiple_instantiations.fuse` exit 42).
 
 Rescheduled: (none this wave)

@@ -2043,3 +2043,100 @@ grep "WC007" docs/learning-log.md
 ```
 All commands exited 0 on this machine (windows/amd64, go1.22+).
 CI matrix green on the committed SHA is the authoritative record.
+
+### WC008 — Wave 08 Closure
+
+Date: 2026-04-17
+Wave: 08 — Monomorphization
+
+**Proof programs added this wave**:
+- `tests/e2e/identity_generic.fuse` — generic `fn identity[T]`
+  called with `identity[I32](42)`; exit 42. Driving test:
+  `TestIdentityGeneric` in `tests/e2e/spine_test.go`.
+- `tests/e2e/multiple_instantiations.fuse` — same generic fn
+  called with two distinct type args (`I32` and `I64`) via
+  helper fns `call_i32` and `call_i64`; exit 42 (21 + 21).
+  Driving test: `TestMultipleInstantiations` in the same file.
+Both programs compile through the full pipeline (parse → resolve
+→ bridge → check → monomorph → lower → codegen → cc) and are
+registered in `tests/e2e/README.md`.
+
+**Stubs retired this wave**:
+- Monomorphization — removed from `STUBS.md` Active table at the
+  PCL commit of this wave. Confirmed by
+  `go run tools/checkstubs/main.go -wave W08` and
+  `go run tools/checkstubs/main.go -history-current-wave W08`,
+  both exiting 0. Proof surface is enumerated in the W08 block
+  of the `STUBS.md` Stub history.
+
+**Stubs introduced this wave**:
+None. Generic trait-object dispatch (W13) and closure capture
+(W12) still have their own stubs and are not touched by W08.
+Generic enum/struct specialization uses the W04 TypeTable
+nominal-identity lattice, which already supports TypeArgs-based
+distinctness without a new stub row.
+
+**What was harder than planned**:
+- The parser doesn't disambiguate turbofish calls — `identity[I32](42)`
+  parses as `CallExpr{Callee: IndexExpr{PathExpr(identity), I32}}`,
+  indistinguishable at syntax from indexing. A bridge-level
+  reshape (`tryReshapeTurbofish`) recognizes the pattern when
+  the indexed receiver resolves to a fn symbol and the index is
+  type-shaped, converting to a PathExpr with TypeArgs. This is
+  the minimum change that avoids a parser rewrite; proper
+  turbofish syntax (e.g. `::<T>`) is a future parser wave.
+- HIR `FnDecl.Generics` was declared in W04 but left unpopulated
+  by the bridge. The monomorph pass needs it to detect generic
+  fns, so the bridge was extended to copy generic params into
+  the HIR with their KindGenericParam TypeIds.
+- The checker's `inferCall` needed a new substitution path: when
+  the callee carries TypeArgs, substitute them into the fn's
+  generic signature before checking the arguments and computing
+  the return type. Without this, `identity[I32](42)` failed
+  with a `GenericParam does not match I32` diagnostic because
+  the return type was still T.
+- The spine's one-statement-per-body limit made the
+  `multiple_instantiations.fuse` proof awkward. The workaround
+  is helper fns — arguably a cleaner shape anyway, but a
+  reminder that the W05 spine restrictions propagate into every
+  end-to-end proof until W09/W10 open up richer bodies.
+
+**What the next wave must know**:
+- `monomorph.Specialize(prog) (*hir.Program, []lex.Diagnostic)`
+  is the single entry point. Callers should invoke it between
+  `check.Check` and `lower.Lower`; the driver already does.
+- The monomorph pass removes generic originals from its output
+  program. Downstream passes must not assume `fn.Generics` is
+  ever non-empty — at W09+, any generic fn reaching liveness
+  analysis is a monomorph bug.
+- Mangled-name format is `<base>__<TypeName1>_<TypeName2>...`,
+  C-safe (only alphanumerics and underscore). The TypeName for
+  primitives is the Kind string (`I32`, `Bool`, etc.); for
+  nominals it's the declared name; for structural types it's
+  the Kind plus a synthesized tag. Any later wave that wants to
+  change the scheme must coordinate with codegen and testrunner.
+- HIR `PathExpr.TypeArgs` is the canonical carrier for explicit
+  type args at call sites. The checker's substitution path
+  consumes them; W09 liveness analysis should ignore them (they
+  are always empty after monomorph).
+- The W05 lowerer's "one statement per body" restriction is not
+  relaxed by W08. Multi-statement bodies remain a future scope.
+- `TestSpecializationInPipeline` in `compiler/driver/specialize_test.go`
+  is the end-to-end sanity for the pipeline integration; running
+  it as a gate after any W08 surface change is the fastest way
+  to confirm nothing regressed.
+
+**Verification**:
+```
+go test ./compiler/monomorph/... -v
+go test ./compiler/driver/... -run TestSpecializationInPipeline -v
+go test ./tests/e2e/... -run TestIdentityGeneric -v
+go test ./tests/e2e/... -run TestMultipleInstantiations -v
+go run tools/checkstubs/main.go -wave W08 -phase P00
+go run tools/checkstubs/main.go -wave W08
+go run tools/checkstubs/main.go -history-current-wave W08
+grep "WC008" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+,
+MinGW gcc 13.x). CI matrix green on the committed SHA is the
+authoritative record.

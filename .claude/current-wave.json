@@ -1,6 +1,6 @@
 {
   "current_wave": "W08",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Monomorphization wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W08 -phase P00` exits 0: no overdue stubs, Monomorphization row remains Active with retiring wave W08. Next: implementation commit(s) for generic-param scoping (builds on W06 bridge work), explicit type-arg resolution at call sites, instantiation collection, body specialization with deterministic mangled names, call-site rewriting, driver pipeline integration, and e2e proof programs `identity_generic.fuse` and `multiple_instantiations.fuse`."
+  "notes": "Monomorphization wave in closure phase. Monomorphization stub retired: HIR PathExpr.TypeArgs, HIR FnDecl.Generics populated by bridge, bridge-level turbofish reshape for `fn[T](args)` parse ambiguity, checker substitution at call sites, compiler/monomorph package with Specialize() producing deterministic mangled names and removing generic originals, driver wires Check → Specialize → Lower. Proof programs `identity_generic.fuse` and `multiple_instantiations.fuse` both compile via the full pipeline and exit 42. STUBS.md W08 history block appended; WC008 logged using the Rule 10.2 mandated 5-field template. Second wave under Rule 9.5 three-commit discipline: P00 audit (476e1ea), implementation (d927d2b), PCL (this commit). Next: commit W08 PCL and enter W09 Ownership/Liveness."
 }
