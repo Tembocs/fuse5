@@ -1,0 +1,40 @@
+// dyn_dispatch.fuse — W13-P05-T01 proof (structural).
+//
+// Declares an object-safe trait `Draw` and two impls. The full
+// dynamic-dispatch runtime (heterogeneous `List[owned dyn Draw]`
+// + iteration + method dispatch through the fat pointer) needs
+// MIR consolidation for tagged unions (W15), runtime ABI
+// (W16), and codegen C11 hardening (W17). The W13 proof here
+// therefore compiles this file through the checker and the
+// vtable-layout + fat-pointer helpers; the binary-level proof
+// (observable exit code reflecting two different method runs)
+// lands with those later waves. See WC013 for the scope
+// concession and `TestDynDispatchProof` for the W13 assertions.
+
+trait Draw {
+    fn draw(self) -> I32;
+}
+
+struct Circle {
+    r: I32,
+}
+
+impl Circle : Draw {
+    fn draw(self) -> I32 {
+        return 10;
+    }
+}
+
+struct Square {
+    s: I32,
+}
+
+impl Square : Draw {
+    fn draw(self) -> I32 {
+        return 32;
+    }
+}
+
+fn main() -> I32 {
+    return 42;
+}
