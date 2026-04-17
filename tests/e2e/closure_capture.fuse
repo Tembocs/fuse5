@@ -1,0 +1,19 @@
+// closure_capture.fuse — W12-P03-T01 proof.
+//
+// Demonstrates an immediately-invoked closure. The W05-vintage
+// single-statement-body spine cannot yet bind a closure to a
+// local, so the W12 proof uses the inlined form: the closure is
+// defined and called in one expression, and the lowerer inlines
+// the body.
+//
+// A closure with no captures auto-implements Fn + FnMut + FnOnce
+// (see `compiler/check/callable.go`), so this fixture also
+// exercises the callable-trait classification for the simplest
+// case. Richer end-to-end proofs arrive when the spine lifts
+// multi-statement bodies and MIR consolidation lands env-struct
+// + lifted-fn emission.
+//
+// Expected exit code: 42.
+fn main() -> I32 {
+    return (fn() -> I32 { return 42; })();
+}

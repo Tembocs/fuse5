@@ -207,6 +207,35 @@ func (l *lowerer) lowerExpr(modPath string, b *mir.Builder, e hir.Expr, params m
 			"for enum variants, use `EnumName.VariantName`; for fn calls, use `name(args)`")
 		return mir.NoReg, false
 	case *hir.CallExpr:
+		// W12: immediately-invoked closure `(fn() -> T { ... })()`.
+		// For no-capture closures the lowerer inlines the body as
+		// the call's result; this is the W12 proof-path shape
+		// because real env-struct + lifted-fn emission lands with
+		// W15 MIR consolidation. Call-desugaring (`f(args)` →
+		// `f.call(args)`) is structural at W12; the metadata lives
+		// in ClosureAnalysis.
+		if clos, ok := x.Callee.(*hir.ClosureExpr); ok {
+			if len(x.Args) != len(clos.Params) {
+				l.diagnose(x.NodeSpan(),
+					"closure call arity mismatch",
+					"pass exactly as many arguments as the closure declares")
+				return mir.NoReg, false
+			}
+			// Bind each argument under the closure's param name
+			// for the duration of its body.
+			inlineParams := map[string]mir.Reg{}
+			for k, v := range params {
+				inlineParams[k] = v
+			}
+			for i, a := range x.Args {
+				r, ok := l.lowerExpr(modPath, b, a, params)
+				if !ok {
+					return mir.NoReg, false
+				}
+				inlineParams[clos.Params[i].Name] = r
+			}
+			return l.lowerInlinedClosureBody(modPath, b, clos.Body, inlineParams)
+		}
 		callee, ok := x.Callee.(*hir.PathExpr)
 		if !ok {
 			l.diagnose(x.NodeSpan(),
@@ -534,6 +563,39 @@ func orIsTotal(p *hir.OrPat) bool {
 		}
 	}
 	return seenTrue && seenFalse
+}
+
+// lowerInlinedClosureBody inlines a closure body at the call
+// site. At W12 this is the pragmatic stand-in for
+// env-struct-plus-lifted-fn emission: the W05 spine can't yet
+// model indirect fn-pointer calls through an env-carrying
+// struct (W15 MIR consolidation lands that). Inlining covers
+// the W12 proof-path shape for no-capture closures and for
+// closures whose captures happen to match the caller's local
+// names, which the closure-analysis predicates already map.
+//
+// Only a single-statement body is accepted — matching the W05
+// spine restriction. Anything richer deferred until the spine
+// lifts multi-statement bodies in W15+.
+func (l *lowerer) lowerInlinedClosureBody(modPath string, b *mir.Builder, body *hir.Block, params map[string]mir.Reg) (mir.Reg, bool) {
+	if body == nil {
+		l.diagnose(lex.Span{},
+			"closure body is nil",
+			"this is a bridge bug, not a user error")
+		return mir.NoReg, false
+	}
+	if body.Trailing != nil && len(body.Stmts) == 0 {
+		return l.lowerExpr(modPath, b, body.Trailing, params)
+	}
+	if len(body.Stmts) == 1 {
+		if ret, ok := body.Stmts[0].(*hir.ReturnStmt); ok && ret.Value != nil {
+			return l.lowerExpr(modPath, b, ret.Value, params)
+		}
+	}
+	l.diagnose(body.NodeSpan(),
+		"spine requires a single-expression closure body for inline call",
+		"use `fn() -> T { return <expr>; }` or a bare trailing expression")
+	return mir.NoReg, false
 }
 
 // lowerTry lowers a `?` expression to branch-and-early-return.

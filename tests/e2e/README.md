@@ -35,6 +35,7 @@ Go test that executes it.
 | `match_enum_dispatch.fuse` | W10 | `42` | (empty) | `TestMatchEnumDispatch` in `tests/e2e/match_test.go` |
 | `error_propagation_err.fuse` | W11 | `43` | (empty) | `TestErrorPropagation/run-false-propagates-err` |
 | `error_propagation_ok.fuse` | W11 | `0` | (empty) | `TestErrorPropagation/run-true-continues-ok` |
+| `closure_capture.fuse` | W12 | `42` | (empty) | `TestClosureCaptureRuns` in `tests/e2e/closure_capture_test.go` |
 
 ## Contract
 
