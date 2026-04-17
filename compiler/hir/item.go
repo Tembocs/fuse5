@@ -20,10 +20,10 @@ func (m *Module) itemNode() {}
 // declaration has Body == nil.
 type FnDecl struct {
 	Base
-	Name     string
-	Params   []*Param
-	Return   typetable.TypeId // Unit when the source omitted a return type
-	TypeID   typetable.TypeId // the function's own Fn TypeId (builder-enforced)
+	Name   string
+	Params []*Param
+	Return typetable.TypeId // Unit when the source omitted a return type
+	TypeID typetable.TypeId // the function's own Fn TypeId (builder-enforced)
 	// SymID is the resolve.SymbolID (stored as int to avoid import
 	// cycles) that this fn declares. Populated by the bridge; zero
 	// for synthesized fns that never entered the resolver. Passes
@@ -130,9 +130,9 @@ func (t *TraitDecl) itemNode() {}
 // ImplDecl is an inherent or trait impl block.
 type ImplDecl struct {
 	Base
-	Target typetable.TypeId // the type being implemented
-	Trait  typetable.TypeId // the trait being implemented (NoType for inherent)
-	Items  []Item
+	Target   typetable.TypeId // the type being implemented
+	Trait    typetable.TypeId // the trait being implemented (NoType for inherent)
+	Items    []Item
 	Generics []*GenericParam
 }
 

@@ -13,9 +13,9 @@ import (
 // uncalled const fns are still subject to the rules.
 func TestConstFnRestrictions(t *testing.T) {
 	cases := []struct {
-		name      string
-		src       string
-		wantFrag  string
+		name     string
+		src      string
+		wantFrag string
 	}{
 		{
 			name: "ffi-call",

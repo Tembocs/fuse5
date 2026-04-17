@@ -1,6 +1,6 @@
 // Package consteval is the Wave 14 compile-time evaluator.
 //
-// Scope
+// # Scope
 //
 // The evaluator runs over *checked* HIR — after the checker (W06) has
 // replaced every KindInfer TypeId with a concrete type and the bridge

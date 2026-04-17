@@ -299,11 +299,12 @@ func (l *lowerer) lowerExpr(modPath string, b *mir.Builder, e hir.Expr, params m
 //     lowerer emits next (typically a Return).
 //
 // Supported scrutinee shapes:
-//   (a) scrutinee is Bool; arms are LiteralPat bool patterns plus
-//       an optional wildcard.
-//   (b) scrutinee is a simple enum (no payloads); arms are
-//       ConstructorPat using the enum's variant names, plus an
-//       optional wildcard.
+//
+//	(a) scrutinee is Bool; arms are LiteralPat bool patterns plus
+//	    an optional wildcard.
+//	(b) scrutinee is a simple enum (no payloads); arms are
+//	    ConstructorPat using the enum's variant names, plus an
+//	    optional wildcard.
 //
 // Match expressions whose arm patterns fall outside the W10
 // supported set (non-bool literals, range, tuple, nested

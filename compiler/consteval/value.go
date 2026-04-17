@@ -36,10 +36,10 @@ const (
 //   - VKUnit:   all zero.
 //   - VKTuple:  Elems holds the element values in source order.
 //   - VKArray:  Elems holds the element values in index order; Type
-//               is the KindArray TypeId.
+//     is the KindArray TypeId.
 //   - VKStruct: Fields holds field values keyed by name; FieldOrder
-//               records the source-declaration order for
-//               deterministic iteration (Rule 7.1).
+//     records the source-declaration order for
+//     deterministic iteration (Rule 7.1).
 //   - VKChar:   Int holds the code point; Type is Char.
 //
 // Int is stored as uint64 regardless of signedness so the evaluator
