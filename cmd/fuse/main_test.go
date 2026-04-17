@@ -6,9 +6,10 @@ import (
 	"testing"
 )
 
-// TestCliStub is the W00-P02-T03 Verify target. It confirms the Stage 1 CLI
-// binary exists, builds, and exposes the minimal subcommand surface expected
-// at Wave 00: version and help. The subcommand surface expands in W18.
+// TestCliStub is the original W00 Verify target. It now covers the
+// W00-surface invariants that still hold at W05: version reports the
+// active wave, help prints a subcommand listing, and missing
+// arguments are a usage error.
 func TestCliStub(t *testing.T) {
 	t.Run("version prints and exits zero", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
@@ -16,8 +17,8 @@ func TestCliStub(t *testing.T) {
 		if code != 0 {
 			t.Fatalf("version exit = %d, want 0; stderr=%q", code, stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "W00") {
-			t.Errorf("version stdout = %q, want to contain W00", stdout.String())
+		if !strings.Contains(stdout.String(), "W05") {
+			t.Errorf("version stdout = %q, want to contain W05", stdout.String())
 		}
 	})
 
@@ -43,11 +44,11 @@ func TestCliStub(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown subcommand exits non-zero", func(t *testing.T) {
+	t.Run("truly unknown subcommand exits non-zero", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		code := run([]string{"build"}, &stdout, &stderr)
+		code := run([]string{"xyzzy"}, &stdout, &stderr)
 		if code == 0 {
-			t.Fatalf("unknown subcommand 'build' exit = 0, want non-zero (W18 wires build)")
+			t.Fatalf("unknown subcommand 'xyzzy' exit = 0, want non-zero")
 		}
 	})
 }

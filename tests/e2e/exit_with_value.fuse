@@ -1,0 +1,10 @@
+// exit_with_value.fuse — the W05 spine's exit-code proof program.
+//
+// Compiles the integer expression `6 * 7 = 42` and returns it as the
+// process exit code. Demonstrates that the MIR arithmetic path —
+// not just the ConstInt short-circuit — round-trips correctly
+// through codegen and the host C compiler.
+// Expected exit code: 42.
+fn main() -> I32 {
+    return 6 * 7;
+}

@@ -1,0 +1,7 @@
+// hello_exit.fuse — the W05 spine's smallest proof program.
+//
+// Compiles, links, and runs on Linux, macOS, and Windows.
+// Expected exit code: 0.
+fn main() -> I32 {
+    return 0;
+}

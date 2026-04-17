@@ -1,6 +1,6 @@
 {
-  "current_wave": "W04",
+  "current_wave": "W05",
   "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "HIR and TypeTable wave in closure phase. Stub retired (typetable with TypeId interning + nominal identity per §2.8 + KindChannel/KindThreadHandle for W07; hir with structured patterns per L007, metadata-enforcing builders, AST-to-HIR bridge with no Unknown defaults per L013, stable NodeID, invariant walker, pass manifest with SHA-256 fingerprints and deterministic topological ordering, incremental substitutability). STUBS.md W04 history block appended; WC004 logged. All 8 wave-spec Verify commands pass; full `go test ./...` green. Next: commit W04 closure and enter W05 Minimal End-to-End Spine."
+  "notes": "Minimal End-to-End Spine wave in closure phase. Spine stub retired: minimal MIR (const-int + add/sub/mul/div/mod + return), HIR-to-MIR lowerer with diagnostics on non-spine forms, deterministic C11 codegen, host cc detection (GCC/Clang/MSVC), runtime header + abort.c, end-to-end driver `fuse build`, and the `build` subcommand. Proof programs `hello_exit.fuse` (exit 0) and `exit_with_value.fuse` (exit 42 via `6 * 7`) compile and run. STUBS.md W05 history block appended; WC005 logged. All 9 wave-spec Verify commands pass; full `go test ./...` green. Next: commit W05 closure and enter W06 Type Checking."
 }

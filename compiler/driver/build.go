@@ -1,0 +1,197 @@
+package driver
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/Tembocs/fuse5/compiler/cc"
+	"github.com/Tembocs/fuse5/compiler/codegen"
+	"github.com/Tembocs/fuse5/compiler/hir"
+	"github.com/Tembocs/fuse5/compiler/lex"
+	"github.com/Tembocs/fuse5/compiler/lower"
+	"github.com/Tembocs/fuse5/compiler/parse"
+	"github.com/Tembocs/fuse5/compiler/resolve"
+	"github.com/Tembocs/fuse5/compiler/typetable"
+)
+
+// BuildOptions bundles every tunable `fuse build` accepts. Callers
+// zero-initialise and then set what they need; the zero value is
+// legal and produces a sensible default binary path next to the
+// source file.
+type BuildOptions struct {
+	// Source is the path to the Fuse source file to build. Required.
+	Source string
+
+	// Output is the path for the produced binary. When empty, the
+	// driver derives it from Source: `foo.fuse` → `foo` (plus
+	// `.exe` on Windows).
+	Output string
+
+	// KeepC retains the generated C source alongside the binary
+	// when true. Used by tests to inspect codegen output.
+	KeepC bool
+
+	// WorkDir overrides the temp directory used for the generated
+	// C source. When empty, os.MkdirTemp picks one.
+	WorkDir string
+}
+
+// BuildResult reports the outcome of a successful build. BinaryPath
+// is the path to the produced executable; CSourcePath is the
+// generated `.c` file (populated whenever KeepC or WorkDir was
+// set; always populated in the result for diagnostic purposes).
+type BuildResult struct {
+	BinaryPath  string
+	CSourcePath string
+}
+
+// Build runs the full W05 pipeline on opts.Source and produces a
+// native binary. Diagnostics from any stage are returned
+// accompanied by an error describing which stage failed. On success
+// the BuildResult is non-nil and err is nil.
+func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
+	if opts.Source == "" {
+		return nil, nil, fmt.Errorf("driver.Build: Source is required")
+	}
+	src, err := os.ReadFile(opts.Source)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read source: %w", err)
+	}
+
+	// Parse.
+	file, parseDiags := parse.Parse(opts.Source, src)
+	if len(parseDiags) != 0 {
+		return nil, parseDiags, fmt.Errorf("parse failed")
+	}
+
+	// Resolve. The W05 driver builds a one-file crate: the source
+	// file is the root module (module path "").
+	sources := []*resolve.SourceFile{{ModulePath: "", File: file}}
+	resolved, resolveDiags := resolve.Resolve(sources, resolve.BuildConfig{})
+	if len(resolveDiags) != 0 {
+		return nil, resolveDiags, fmt.Errorf("resolve failed")
+	}
+
+	// Bridge to HIR.
+	tab := typetable.New()
+	prog, bridgeDiags := hir.NewBridge(tab, resolved, sources).Run()
+	if len(bridgeDiags) != 0 {
+		return nil, bridgeDiags, fmt.Errorf("HIR bridge failed")
+	}
+
+	// Lower to MIR.
+	mirMod, lowerDiags := lower.Lower(prog)
+	if len(lowerDiags) != 0 {
+		return nil, lowerDiags, fmt.Errorf("lowering failed")
+	}
+	if !hasMain(mirMod.SortedFunctionNames()) {
+		return nil, nil, fmt.Errorf(
+			"no `main` function found; the W05 spine requires `fn main() -> I32 { ... }`")
+	}
+
+	// Codegen.
+	cSource, err := codegen.EmitC11(mirMod)
+	if err != nil {
+		return nil, nil, fmt.Errorf("codegen: %w", err)
+	}
+
+	// Work directory.
+	workDir := opts.WorkDir
+	cleanup := func() {}
+	if workDir == "" {
+		workDir, err = os.MkdirTemp("", "fuse-build-*")
+		if err != nil {
+			return nil, nil, fmt.Errorf("mktemp: %w", err)
+		}
+		if !opts.KeepC {
+			cleanup = func() { os.RemoveAll(workDir) }
+		}
+	} else {
+		if err := os.MkdirAll(workDir, 0o755); err != nil {
+			return nil, nil, fmt.Errorf("mkdir: %w", err)
+		}
+	}
+
+	cPath := filepath.Join(workDir, baseStem(opts.Source)+".c")
+	if err := os.WriteFile(cPath, []byte(cSource), 0o644); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("write C source: %w", err)
+	}
+
+	// Detect and invoke the host C compiler.
+	cc1, err := cc.Detect()
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("detect cc: %w", err)
+	}
+	binPath := opts.Output
+	if binPath == "" {
+		binPath = deriveBinaryPath(opts.Source)
+	}
+	if err := cc1.Compile(cPath, binPath); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("cc compile: %w", err)
+	}
+
+	// Do not remove the work directory when the user asked to keep
+	// the C source or when a custom WorkDir was provided; the
+	// caller owns the directory in those cases.
+	return &BuildResult{BinaryPath: binPath, CSourcePath: cPath}, nil, nil
+}
+
+// hasMain returns true when `main` is among the function names.
+func hasMain(names []string) bool {
+	for _, n := range names {
+		if n == "main" {
+			return true
+		}
+	}
+	return false
+}
+
+// baseStem returns the base filename of path with its extension
+// removed — used when placing generated files in the work directory.
+func baseStem(path string) string {
+	b := filepath.Base(path)
+	if dot := strings.LastIndex(b, "."); dot >= 0 {
+		return b[:dot]
+	}
+	return b
+}
+
+// deriveBinaryPath turns `foo/bar.fuse` into `foo/bar` (or
+// `foo/bar.exe` on Windows). Callers that want a different output
+// path set opts.Output explicitly.
+func deriveBinaryPath(src string) string {
+	dir := filepath.Dir(src)
+	stem := baseStem(src)
+	path := filepath.Join(dir, stem)
+	if strings.HasSuffix(strings.ToLower(filepath.Ext(src)), ".fuse") {
+		// On Windows the linker expects an .exe extension for
+		// executables; Go's `exec.Command` also relies on it.
+		if isWindowsHost() {
+			path += ".exe"
+		}
+	}
+	return path
+}
+
+// isWindowsHost is a small indirection that tests can override;
+// callers use runtime.GOOS directly elsewhere.
+var isWindowsHost = func() bool {
+	return filepath.Separator == '\\' || osIsWindows()
+}
+
+// osIsWindows checks GOOS via a helper so the function pointer above
+// can be replaced in tests without touching runtime.GOOS directly.
+func osIsWindows() bool {
+	return pathSeparatorIsWindows()
+}
+
+// pathSeparatorIsWindows is the actual OS probe; factored so the
+// test file can override it when needed.
+var pathSeparatorIsWindows = func() bool {
+	return filepath.Separator == '\\'
+}

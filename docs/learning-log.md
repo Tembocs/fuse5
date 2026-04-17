@@ -1529,3 +1529,157 @@ grep "WC004" docs/learning-log.md
 ```
 All commands exited 0 on this machine (windows/amd64, go1.22+). CI
 matrix green on the committed SHA is the authoritative record.
+
+### WC005 — Wave 05 Closure
+
+Wave 05 (Minimal End-to-End Spine) completed 2026-04-17. Fuse now
+compiles, links, runs, and returns a chosen exit code for the
+narrow subset of programs W05 supports (zero-arg `main() -> I32`
+whose body is a single `return` of integer-literal arithmetic).
+The L013 deferred-proof failure mode is closed: every claim the
+compiler makes about its behavior is now backed by an executed
+binary, not just unit tests.
+
+**Scope landed**:
+
+- `compiler/mir/` — the minimal MIR instruction set (`OpConstInt`,
+  `OpAdd`/`Sub`/`Mul`/`Div`/`Mod`, `TermReturn`), a `Function` with
+  a register-and-block allocator `Builder`, and a `Validate` method
+  that catches every shape violation (undefined registers, missing
+  terminators, unsupported opcodes). MIR is explicitly append-only:
+  later waves add more `Op` values; they do not edit existing
+  instructions.
+- `compiler/lower/` — HIR → MIR for the W05 spine. Every HIR form
+  outside the spine emits a diagnostic naming what would be
+  required to support it, never a silent default (Rule 6.9). The
+  lowerer is the forcing function for the no-quiet-fallback
+  invariant: adding a new instruction to MIR without teaching the
+  lowerer is a test-time failure, not a runtime one.
+- `compiler/codegen/c11.go` — deterministic ISO C11 emission. Uses
+  `<stdint.h>` only; `int main(void)` narrows the MIR int64 result
+  to `int` with an explicit cast. Register declarations are hoisted
+  to the top of the function body so ISO C11 is happy on every host
+  C compiler we target. `EmitC11(m) == EmitC11(m)` byte-for-byte
+  across five consecutive runs.
+- `compiler/cc/` — host C toolchain detection and invocation. `$CC`
+  overrides the probe order; otherwise we probe
+  `cc`/`clang`/`gcc` (Unix) or `cc`/`gcc`/`clang`/`cl` (Windows).
+  `Kind` (GCC / Clang / MSVC) drives flag spelling: `-std=c11 -o`
+  for GCC/Clang, `/std:c11 /Fe:` for MSVC. Detection errors name
+  every probed candidate so the user can tell what Fuse looked for.
+- `runtime/include/fuse_rt.h` — the ABI surface for the Fuse
+  runtime. W05 declares `fuse_rt_abort`, `fuse_rt_panic`,
+  stdout/stderr writers, and the W07 concurrency surface
+  (thread_spawn/join, chan_new/send/recv). Only `fuse_rt_abort` has
+  a real implementation at W05; the rest call through to abort with
+  a not-yet-implemented message so a rogue codegen cannot silently
+  produce wrong output. The ABI is frozen: W16 may add
+  functions but may not change any existing signature.
+- `compiler/driver/` — end-to-end `Build` orchestration: parse to
+  resolve to HIR bridge to lower to codegen to cc. Diagnostics from
+  any stage propagate out with a stage-named error so the CLI can
+  tell the user which phase rejected their program. Work
+  directories are temp-allocated unless the caller supplies one or
+  asks to keep the generated C (`KeepC: true`).
+- `cmd/fuse/` — `fuse build <file>` with `-o PATH` and
+  `--keep-c` flags. The old Wave-00 CLI kept only `version` and
+  `help`; W05 adds `build` and renames the version string to
+  `0.0.0-W05`. W18 wires `run`/`check`/`test`/`fmt`/`doc`/`repl`
+  on top without touching W05 surface.
+- `tests/e2e/` — the proof-program registry lives here. `README.md`
+  is the normative table (Rule 6.8) listing each `.fuse` source,
+  its wave, expected exit, expected stdout, and driving test.
+  `spine_test.go` contains `TestHelloExit` (exit 0) and
+  `TestExitWithValue` (exit 42 via `6 * 7`). Both tests skip
+  cleanly when the host lacks a C compiler; CI guarantees one.
+
+**Notable design choices**:
+
+- The W05 spine is deliberately tiny. Supporting even a second
+  statement in the fn body would drag in locals, register
+  allocation, and mutation semantics — all scheduled for later
+  waves. Keeping W05 to one `return` lets us prove the pipeline
+  end-to-end without committing to semantics that might change.
+- Every rejection emits a diagnostic that names the wave that will
+  lift the restriction (W05 spine does not yet lower fn
+  parameters). Users can tell from the message whether they hit a
+  permanent constraint or a wave-scheduled limitation.
+- MIR `Validate` is called from the lowerer after every function
+  is built. A lowering bug that produces invalid MIR becomes a
+  diagnostic at `Lower()` time, not a crash in codegen — which
+  means the pipeline terminates cleanly with a good error message
+  instead of a backtrace.
+- `KindMSVC` detection picks MSVC-style flag spelling at invocation
+  time. At W05 the Windows CI image uses MinGW `gcc`, so MSVC flag
+  handling is declared but unexercised; W17 (C11 hardening)
+  tightens the MSVC path when compiler-specific pragmas land.
+- The runtime abort uses `abort()` (not `exit(1)`) so users get a
+  real signal/coredump when a stub is called. This matches how C
+  runtimes surface unreachable states; it is a real failure, not a
+  user-level error.
+
+**Lessons captured**:
+
+- Binary extensions matter: on Windows, `exec.Command` requires the
+  `.exe` suffix to find the produced binary. The driver derives it
+  automatically when `-o` is not provided; the e2e tests set `-o`
+  explicitly via `binaryName(stem)` to stay portable.
+- ISO C11 forbids mixed declarations-and-statements inside the
+  function body in strict mode on some toolchains. The C11 emitter
+  hoists all register declarations to the top of the function to
+  dodge that trap regardless of compiler flags. The same pattern
+  will generalize for variables when W06 adds locals.
+- The host C compiler is a data dependency. Skipping when it is
+  absent (rather than failing) is correct for developer machines;
+  CI guarantees presence so the test suite pass rate is the signal.
+  Later waves must not weaken this skip gate into a no-op; a
+  missing compiler should always be an explicit skip, not a silent
+  success.
+- The fuse_rt.h header is frozen at W05 because every future
+  runtime wave (W07 threads/channels, W16 threads/channels/IO, W22
+  stdlib-hosted) attaches to this exact signature list. A change
+  to an existing signature would cascade through every codegen
+  target; additions are the only safe path.
+
+**Proof surface**:
+
+- `TestMinimalMir` (6 sub-cases: const-then-return, add-and-return,
+  validate-rejects-undefined-register,
+  validate-rejects-missing-terminator, binary-op-guard,
+  op-string-stable)
+- `TestMinimalLowerIntReturn` (4 happy-path sub-cases)
+- `TestMinimalLowerIntReturn_Rejects` (5 rejection sub-cases
+  covering parameters, multi-statement bodies, trailing
+  expressions, non-integer literals, non-arithmetic binary ops)
+- `TestMinimalCodegenC` (4 sub-cases including determinism and
+  unsupported-op rejection)
+- `TestCCDetection` / `TestCCDetection_HonorsEnv` /
+  `TestCCDetection_ErrorWhenAbsent` / `TestKindFromName`
+- `TestStubRuntime` (header + abort.c existence)
+- `TestMinimalBuildInvocation` (end-to-end build + run),
+  `TestMinimalBuildInvocation_ExitCode`,
+  `TestMinimalBuildInvocation_RejectsInvalid`
+- `TestMinimalCli` (4 sub-cases including unknown-flag handling)
+- `TestCliStub` updated to match the W05 subcommand surface
+- `TestHelloExit` (tests/e2e: exit 0)
+- `TestExitWithValue` (tests/e2e: exit 42 via `6 * 7`)
+
+**Verification**:
+```
+go test ./compiler/mir/... -run TestMinimalMir -v
+go test ./compiler/lower/... -run TestMinimalLowerIntReturn -v
+go test ./compiler/codegen/... -run TestMinimalCodegenC -v
+go test ./compiler/cc/... -run TestCCDetection -v
+go test ./runtime/tests/... -run TestStubRuntime -v
+go test ./compiler/driver/... -run TestMinimalBuildInvocation -v
+go test ./cmd/fuse/... -run TestMinimalCli -v
+go test ./tests/e2e/... -run TestHelloExit -v
+go test ./tests/e2e/... -run TestExitWithValue -v
+go run tools/checkstubs/main.go -wave W05 -phase P00
+go run tools/checkstubs/main.go -wave W05
+go run tools/checkstubs/main.go -history-current-wave W05
+grep "WC005" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+, MinGW
+gcc 13.x). CI matrix green on the committed SHA is the authoritative
+record.

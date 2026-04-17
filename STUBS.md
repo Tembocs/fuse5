@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Minimal end-to-end spine | compiler/driver/ (empty) | no binary produced | "Stage 1 driver not yet implemented" | W05 |
 | Type checker | compiler/check/ (empty) | no types checked | "type checker not yet implemented" | W06 |
 | Concurrency checker (Send/Sync/Chan/spawn/@rank) | compiler/check/ (empty) | no concurrency enforcement | "concurrency checker not yet implemented" | W07 |
 | Monomorphization | compiler/monomorph/ (empty) | no generic specialization | "monomorphization not yet implemented" | W08 |
@@ -211,5 +210,29 @@ Retired:
   `TestStableNodeIdentity` (unrelated edit does not shift NodeIDs),
   `TestIncrementalSubstitutable` (invalidating one function's HIR re-runs
   only its dependent passes).
+
+Rescheduled: (none this wave)
+
+### W05 — Minimal End-to-End Spine
+
+Added: (none this wave)
+
+Retired:
+- Minimal end-to-end spine (compiler/mir/mir.go, compiler/lower/lower.go,
+  compiler/codegen/c11.go, compiler/cc/compiler.go, compiler/driver/build.go,
+  cmd/fuse/main.go with the `build` subcommand, runtime/include/fuse_rt.h,
+  runtime/src/abort.c) — confirmed retired by `go test ./... -v` and each
+  wave-spec Verify command. Proof surface: `TestMinimalMir`,
+  `TestMinimalLowerIntReturn` (+ `_Rejects` for every non-spine HIR form
+  that must emit a diagnostic), `TestMinimalCodegenC` (literal main,
+  arithmetic main, deterministic output, rejects unsupported op),
+  `TestCCDetection` / `TestCCDetection_HonorsEnv` /
+  `TestCCDetection_ErrorWhenAbsent`, `TestStubRuntime` (fuse_rt.h
+  declares every W05/W07/W16/W22 surface; abort.c implements the W05
+  abort), `TestMinimalBuildInvocation` (full pipeline: Fuse source →
+  C11 → host compile → run → check exit code), `TestMinimalCli` (four
+  sub-cases), `TestHelloExit` (exit 0), `TestExitWithValue` (exit 42
+  via `6 * 7`). `tests/e2e/README.md` created as the proof-program
+  registry per Rule 6.8.
 
 Rescheduled: (none this wave)
