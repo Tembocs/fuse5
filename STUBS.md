@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| HIR and TypeTable | compiler/hir/ (empty) | no HIR constructed | "HIR/TypeTable not yet implemented" | W04 |
 | Minimal end-to-end spine | compiler/driver/ (empty) | no binary produced | "Stage 1 driver not yet implemented" | W05 |
 | Type checker | compiler/check/ (empty) | no types checked | "type checker not yet implemented" | W06 |
 | Concurrency checker (Send/Sync/Chan/spawn/@rank) | compiler/check/ (empty) | no concurrency enforcement | "concurrency checker not yet implemented" | W07 |
@@ -184,5 +183,33 @@ Retired:
   nested combinators, duplicate-item detection across `@cfg` overlaps
   (reference §50.1), and four-level visibility enforcement
   (private / pub(mod) / pub(pkg) / pub — reference §53.1).
+
+Rescheduled: (none this wave)
+
+### W04 — HIR and TypeTable
+
+Added: (none this wave)
+
+Retired:
+- HIR and TypeTable (compiler/typetable/kind.go, compiler/typetable/type.go,
+  compiler/typetable/table.go, compiler/hir/doc.go, compiler/hir/node.go,
+  compiler/hir/identity.go, compiler/hir/item.go, compiler/hir/expr.go,
+  compiler/hir/pat.go, compiler/hir/stmt.go, compiler/hir/program.go,
+  compiler/hir/builder.go, compiler/hir/bridge.go, compiler/hir/invariant.go,
+  compiler/hir/manifest.go, compiler/hir/incremental.go) — confirmed retired
+  by `go test ./compiler/typetable/... -v`, `go test ./compiler/hir/... -v`,
+  and each wave-spec Verify command. Proof surface: `TestTypeInternEquality`,
+  `TestNominalIdentity`, `TestChannelTypeKindExists`, `TestThreadHandleKindExists`,
+  `TestInferIsExplicit`, `TestHirNodeSet`, `TestMetadataFields`,
+  `TestBuilderEnforcement` (10 sub-cases), `TestBuilderEnforcement_HappyPath`,
+  `TestAstToHirTypePreservation` (6 sub-cases including nominal identity
+  propagation across fn signatures and struct-literal constructors),
+  `TestBridgeInvariant`, `TestInvariantWalkers` (clean + synthetic violation),
+  `TestPassManifest` (5 sub-cases including cycle detection), `TestDeterministicOrder`
+  (-count=3 confirms stable topological order), `TestPassFingerprintStable`
+  (-count=3 confirms byte-identical fingerprints across runs),
+  `TestStableNodeIdentity` (unrelated edit does not shift NodeIDs),
+  `TestIncrementalSubstitutable` (invalidating one function's HIR re-runs
+  only its dependent passes).
 
 Rescheduled: (none this wave)

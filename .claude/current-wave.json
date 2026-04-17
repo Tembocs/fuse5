@@ -1,6 +1,6 @@
 {
-  "current_wave": "W03",
+  "current_wave": "W04",
   "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Resolution wave in closure phase. Module resolver stub retired (DiscoverFromDir, ModuleGraph, SymbolTable, top-level indexing, module-first import fallback per §18.7, qualified enum variants per §11.6, Tarjan-based import cycle detection, @cfg evaluator per §50.1 including duplicate-item detection, four-level visibility enforcement per §53.1). STUBS.md W03 history block appended; WC003 logged. All 10 wave-spec Verify commands pass; full `go test ./...` green. Next: commit W03 closure and enter W04 HIR and TypeTable."
+  "notes": "HIR and TypeTable wave in closure phase. Stub retired (typetable with TypeId interning + nominal identity per §2.8 + KindChannel/KindThreadHandle for W07; hir with structured patterns per L007, metadata-enforcing builders, AST-to-HIR bridge with no Unknown defaults per L013, stable NodeID, invariant walker, pass manifest with SHA-256 fingerprints and deterministic topological ordering, incremental substitutability). STUBS.md W04 history block appended; WC004 logged. All 8 wave-spec Verify commands pass; full `go test ./...` green. Next: commit W04 closure and enter W05 Minimal End-to-End Spine."
 }

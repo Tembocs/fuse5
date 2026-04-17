@@ -1384,3 +1384,148 @@ grep "WC003" docs/learning-log.md
 ```
 All commands exited 0 on this machine (windows/amd64, go1.22+). CI
 matrix green on the committed SHA is the authoritative record.
+
+### WC004 — Wave 04 Closure
+
+Wave 04 (HIR and TypeTable) completed 2026-04-17. The `compiler/typetable/`
+and `compiler/hir/` packages are now the retirement site of the W00-declared
+"HIR and TypeTable" stub. Together they form the typed semantic IR that
+sits between the resolver (W03) and the type checker (W06), with the
+pass-graph foundation that W18 (incremental driver) and W19 (LSP) consume
+without rework.
+
+**Scope landed**:
+
+- `compiler/typetable/` — `TypeId`, `Kind`, `Type`, and `Table`. The set
+  of kinds is fixed (no `Unknown` member by design — L013 defense). The
+  interner pre-allocates every primitive TypeId in a deterministic order
+  so intern tables across runs have the same layout (Rule 7.1). Nominal
+  identity is (name, defining-symbol, module, type-args); two `Expr`
+  structs from different modules are distinct TypeIds per reference
+  §2.8. Bounds on `dyn Trait1 + Trait2` are canonicalised by sorting so
+  `dyn A + B` and `dyn B + A` share a TypeId. `KindChannel` and
+  `KindThreadHandle` are defined now for W07 concurrency work without
+  retrofitting.
+- `compiler/hir/` — full semantic IR. Every Typed node carries a
+  `TypeId`; every `Node` carries a stable `NodeID`. Structured patterns
+  (`LiteralPat`, `BindPat`, `ConstructorPat`, `WildcardPat`, `OrPat`,
+  `RangePat`, `AtBindPat`) replace text-form patterns (L007 defense).
+  Builders (`Builder.New*`) enforce metadata at construction — missing
+  `NodeID`, `NoType` type, wrong kind, or nil required child → panic.
+  The AST-to-HIR bridge lives in the same package so the invariant
+  walkers can be run against the bridge's output directly.
+- `NodeID` identity is stable across unrelated source edits
+  (W04-P05-T02). The format is `module::item::local_path` where
+  `local_path` is a structural breadcrumb (`body/stmt.2/lhs`), not an
+  allocation counter. Editing function `g` does not shift any NodeID
+  inside function `f`.
+- `Manifest` is the pass graph. Passes declare Inputs, an OutputKey,
+  and a `Fingerprint(inputs) []byte`. `Validate` runs a Kahn topological
+  sort with lexicographic tie-breaking so the order is byte-identical
+  across runs (Rule 7.1). `Run` executes the validated order; duplicate
+  names, missing inputs, and cycles are pipeline bugs (panic or error,
+  not user diagnostics).
+- `ComputeFingerprint` is the stable hash helper — SHA-256 over the
+  pass name followed by sorted key/value input pairs, each NUL-
+  separated so keys and values can never collide lexically. Pass name
+  is folded in first so two passes with identical inputs produce
+  distinct digests.
+- `IncrementalPlan` computes the Rerun/Reuse partition for a
+  Manifest given a set of dirty inputs. It propagates dirtiness
+  transitively: any pass that depends on a dirty input or on a
+  transitively dirty pass must re-run; everything else reuses. Tests
+  exercise two scenarios — a localised edit (one function's HIR
+  invalidated, only its dependents re-run) and a source-root edit
+  (every pass re-runs).
+- `RunInvariantWalker` is the continuous invariant check W04-P04-T02
+  declares. It walks the full Program and reports: empty NodeIDs,
+  NoType TypeIds, `NoType` ConstructorType fields, nil required
+  pattern/body fields, OrPats with < 2 alternatives, RangePats missing
+  a bound. The bridge's own output passes the walker cleanly; a
+  synthetic corruption produces a violation.
+
+**Notable design choices**:
+
+- No `Unknown` kind in TypeTable. The explicit `KindInfer` exists for
+  the "type checker will resolve this" case — the bridge writes it
+  whenever it cannot honestly propagate a concrete type. Passes
+  observing a post-check KindInfer must emit a compiler bug (not a
+  user diagnostic).
+- Bridge type derivation priority order (documented in bridge.go):
+  (1) source annotation; (2) resolver binding → symbol's TypeId; (3)
+  literal primitive kind (hinted by context); (4) explicit Infer.
+  Rule (4) is the only fallback; there is no silent Unknown default.
+- Pass fingerprints include the pass name. Otherwise two passes with
+  the same inputs would share a digest and the cache couldn't tell
+  them apart.
+- `Manifest.Passes()` returns a deterministic list even before
+  `Validate` — lexicographic order when the graph is not yet built —
+  so tests that inspect pre-validation state don't depend on map
+  iteration order.
+- Nominal identity in TypeTable records the defining `Symbol` as an
+  `int` (not a typed `resolve.SymbolID`) to avoid an import cycle.
+  The resolver's SymbolID is the canonical source of truth; the
+  TypeTable is a consumer.
+
+**Lessons captured**:
+
+- A TypeTable that treats the hash map value as the interner is
+  simpler and more deterministic than threading a comparison function
+  through every Intern call. The cost is stringifying the key on every
+  intern; the benefit is trivial diff-ability of the table state in
+  tests.
+- `Param` and `Field` should satisfy `Node` (for NodeID/Span) but not
+  the marker interfaces of `Item`/`Expr`/`Stmt`/`Pat`. Adding false-
+  positive markers during the first HIR draft caused the compiler to
+  accept a Param in expression position; the cleanup was to remove
+  those markers so the type system catches the bad substitution at
+  build time.
+- The parser emits `a.b.c` as a FieldExpr chain, not a 2-segment
+  PathExpr. The bridge already handles this correctly because it calls
+  lowerExpr on each FieldExpr's receiver recursively and the resolver's
+  Bindings map has attached symbols to FieldExpr spans where
+  applicable.
+- Tarjan-style pass-graph cycle detection would be overkill; Kahn
+  with sorted tie-breaking gives the same deterministic topological
+  order and simpler code.
+- `TestPassFingerprintStable -count=3` is the right shape of test for
+  any byte-deterministic output contract. The pattern generalises to
+  other waves (golden tests, mangled name generation in W08).
+
+**Proof surface**:
+
+- `compiler/typetable/`: `TestTypeInternEquality` (6 sub-cases),
+  `TestNominalIdentity` (5 sub-cases), `TestChannelTypeKindExists`,
+  `TestThreadHandleKindExists`, `TestInferIsExplicit`.
+- `compiler/hir/`: `TestHirNodeSet` (33 concrete types), `TestMetadataFields`,
+  `TestBuilderEnforcement` (10 sub-cases for required-metadata panics),
+  `TestBuilderEnforcement_HappyPath`, `TestAstToHirTypePreservation` (6
+  sub-cases proving types propagate through fn signatures, let
+  annotations, struct nominals, enum variants, and the "no expression
+  has NoType" invariant), `TestBridgeInvariant`, `TestInvariantWalkers`
+  (clean + synthetic violation), `TestPassManifest` (5 sub-cases
+  including cycle detection and validated run order),
+  `TestDeterministicOrder` (-count=3 confirms stable topological
+  ordering), `TestPassFingerprintStable` (-count=3 confirms byte-
+  identical digests across runs), `TestStableNodeIdentity` (editing
+  function g does not shift any NodeID in function f),
+  `TestIncrementalSubstitutable` (one-function-invalidation only re-runs
+  dependent passes; root-level invalidation re-runs everything).
+
+**Verification**:
+```
+go test ./compiler/typetable/... -v
+go test ./compiler/hir/... -v
+go test ./compiler/hir/... -run TestInvariantWalkers -v
+go test ./compiler/hir/... -run TestBuilderEnforcement -v
+go test ./compiler/hir/... -run TestAstToHirTypePreservation -v
+go test ./compiler/hir/... -run TestDeterministicOrder -count=3 -v
+go test ./compiler/hir/... -run TestPassFingerprintStable -count=3 -v
+go test ./compiler/hir/... -run TestIncrementalSubstitutable -v
+go run tools/checkstubs/main.go -wave W04 -phase P00
+go run tools/checkstubs/main.go -wave W04 -retired hir,typetable,bridge
+go run tools/checkstubs/main.go -history-current-wave W04
+grep "WC004" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+). CI
+matrix green on the committed SHA is the authoritative record.
