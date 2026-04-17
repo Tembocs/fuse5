@@ -1235,3 +1235,152 @@ grep "WC002" docs/learning-log.md
 ```
 All commands exited 0 on this machine (windows/amd64, go1.26.2). CI
 matrix green on the committed SHA is the authoritative record.
+
+### WC003 — Wave 03 Closure
+
+Wave 03 (Resolution) completed 2026-04-17. The resolver is now the
+retirement site of the W00-declared `compiler/resolve/` stub. It runs
+after parse and before the HIR+TypeTable construction scheduled for
+W04; its outputs are consumed as-is by that wave.
+
+**Scope landed**:
+
+- Module discovery from a filesystem root (`DiscoverFromDir`) plus an
+  explicit `SourceFile`-slice form for tests and in-memory builds.
+  Discovery is deterministic (Rule 7.1): `walkSorted` visits
+  directories in lexicographic order with directories preceding their
+  sibling files.
+- `ModuleGraph` with sorted `Order` and per-module sorted edge lists;
+  `finalize()` dedupes edge duplicates. Every pass that iterates
+  modules consumes `Order`, never `range Modules` (reference §18).
+- `SymbolTable` with a reserved zero slot so `NoSymbol` is always
+  interpretable without a separate present/absent flag. Scopes chain
+  to a parent for `Lookup`; `LookupLocal` never walks parents.
+- Top-level indexing across every W02 item kind (`FnDecl`,
+  `StructDecl`, `EnumDecl`, `TraitDecl`, `ConstDecl`, `StaticDecl`,
+  `TypeDecl`, `UnionDecl`, `ExternDecl`). Enum variants are hoisted
+  into the enclosing module scope per reference §11.6, §18.6, with
+  conflicts between a variant and a prior item reported as
+  duplicate-item diagnostics.
+- Module-first import resolution (reference §18.7): the full dotted
+  path is tried as a module, and on miss the (prefix, last) pair is
+  tried as (module, item). Single-segment imports skip the prefix-
+  fallback branch and emit a clean "unresolved import" diagnostic
+  when neither step matched.
+- Qualified enum variant resolution for both `Enum.Variant` and
+  `module.Enum.Variant` forms (reference §11.6). Because the W02
+  parser emits `Dir.North` as `FieldExpr{Receiver: PathExpr{Dir},
+  Name: North}`, the resolver's expression walker flattens any
+  FieldExpr-chain rooted at a PathExpr into a dotted segment list
+  and re-resolves it when the root names a module, enum, or import
+  alias. Chains whose root is *not* a static path fall through to
+  ordinary field-access walking so that `local.field` does not get
+  misdiagnosed as an unresolved path.
+- Import cycle detection via Tarjan's strongly-connected-components
+  algorithm. Self-edges are reported as cycles; DAGs are not. Cycle
+  diagnostics name members in lexicographic order for stability.
+- `@cfg` evaluator at resolve time (reference §50.1) covering
+  `key = "value"`, `feature = "x"`, `not(...)`, `all(...)`,
+  `any(...)`, and nested combinations. Items whose predicate is
+  false are filtered before indexing so they participate in no
+  downstream name resolution step (reference §50.1 contract).
+  Duplicate-item detection runs after filtering; two items that
+  both survive a build produce a diagnostic naming the second
+  occurrence and pointing at the first.
+- Four-level visibility enforcement (reference §53.1): private,
+  `pub(mod)` (declaring module and dotted descendants), `pub(pkg)`
+  (entire build), `pub`. Enforcement runs across every recorded path
+  binding so that module-qualified uses, import-qualified uses, and
+  enum-variant uses all pay the same visibility check.
+
+**Notable design choices**:
+
+- AST is not mutated (Rule 3.2). All resolved information lives in a
+  `Resolved` struct: a `*ModuleGraph`, a `*SymbolTable`, and a
+  `map[SiteKey]SymbolID` that binds every successfully resolved path
+  occurrence to its target symbol. Failed resolutions produce
+  diagnostics and no binding (Rule 6.9 — never produce silent wrong
+  output).
+- Primitive type names (`I32`, `Bool`, `String`, etc.) are *skipped*
+  by the resolver. Their identity is scheduled for the W04
+  TypeTable; binding them here would duplicate state.
+- Single-segment PathExprs in expression position fail silently on a
+  miss because they may refer to a local `let`/`var` that W04 (HIR
+  lowering) handles. Multi-segment paths are strict because they
+  must refer to module- or enum-qualified items.
+- `lookupEnumInModule` is a *probe* that returns NoSymbol without
+  diagnosing so the walker can distinguish
+  `module.Enum.Variant` from `module.Submodule.Item` without false
+  positives.
+
+**Proof surface**:
+
+- `TestModuleDiscovery` (run with `-count=3` for determinism),
+  `TestModuleDiscovery_EmptyRoot`
+- `TestModuleGraph`, `TestModuleGraph_DuplicatePath`
+- `TestScopeLookup`, `TestScopeLookup_DuplicateInsert`
+- `TestTopLevelIndex`, `TestTopLevelIndex_DuplicateDefinition`,
+  `TestTopLevelIndex_VariantHoistConflict`
+- `TestModuleFirstFallback` with four sub-cases: full-path-is-module,
+  item-fallback, unresolved-path, totally-missing
+- `TestQualifiedEnumVariant` with three sub-cases: local-enum,
+  cross-module-enum, unknown-variant-is-diagnostic
+- `TestImportCycleDetection` with three sub-cases: two-module,
+  three-module, self-cycle; plus
+  `TestImportCycleDetection_NoFalsePositive` proving a DAG stays
+  silent
+- `TestCfgEvaluation` with 13 sub-cases covering every supported form
+  plus a malformed-bare-ident diagnostic check
+- `TestCfgDuplicates` with three sub-cases covering mutually
+  exclusive predicates, both-survive, and the no-cfg duplicate form
+- `TestVisibilityEnforcement` with five sub-cases across all four
+  levels and their crossings
+
+**Lessons captured**:
+
+- The parser emits `a.b` chains as `FieldExpr{PathExpr, b}` rather
+  than a 2-segment `PathExpr`. The resolver is the first pass that
+  has enough context to tell `module.item` from `local.field`, so
+  flattening happens here — *never* in the parser (Rule 3.2). The
+  `tryResolveFieldChainAsPath` helper's "return false when the root
+  is not a module/enum/alias" check is the forcing function.
+- `@cfg` filtering must complete before indexing, not in parallel
+  with it. If the resolver indexed a `@cfg(os = "windows")` item on
+  Linux and then removed it, a downstream pass could still see a
+  stale binding pointing at the discarded symbol.
+- Import cycle detection via Tarjan is simpler and cheaper than
+  the textbook DFS-color approach, and its iterative structure
+  avoids the recursion-depth guard the parser had to add. A
+  self-edge must be special-cased because an SCC of size 1 without
+  a self-loop is *not* a cycle.
+- Module-first fallback only makes sense for multi-segment paths.
+  A single-segment `import nowhere` that tries the (prefix="",
+  tail=nowhere) form produces diagnostics that read as "no item
+  'nowhere' in module ''" — confusing. The resolver short-circuits
+  the fallback for single-segment paths and emits
+  "unresolved import" directly.
+- Visibility for `pub(mod)` requires a dotted-descendant check, not
+  a prefix-string check. `util.inner` is a descendant of `util`;
+  `utilities` is not. The `isDescendant` helper checks that
+  `usingMod[len(ancestor)] == '.'` after the prefix match.
+
+**Verification**:
+```
+go test ./compiler/resolve/... -v
+go test ./compiler/resolve/... -run TestModuleDiscovery -count=3 -v
+go test ./compiler/resolve/... -run TestModuleGraph -v
+go test ./compiler/resolve/... -run TestScopeLookup -v
+go test ./compiler/resolve/... -run TestTopLevelIndex -v
+go test ./compiler/resolve/... -run TestModuleFirstFallback -v
+go test ./compiler/resolve/... -run TestQualifiedEnumVariant -v
+go test ./compiler/resolve/... -run TestImportCycleDetection -v
+go test ./compiler/resolve/... -run TestCfgEvaluation -v
+go test ./compiler/resolve/... -run TestCfgDuplicates -v
+go test ./compiler/resolve/... -run TestVisibilityEnforcement -v
+go run tools/checkstubs/main.go -wave W03 -phase P00
+go run tools/checkstubs/main.go -wave W03 -retired resolve,cfg,visibility
+go run tools/checkstubs/main.go -history-current-wave W03
+grep "WC003" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+). CI
+matrix green on the committed SHA is the authoritative record.

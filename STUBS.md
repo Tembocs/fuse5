@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Module resolver | compiler/resolve/ (empty) | no resolution performed | "resolver not yet implemented" | W03 |
 | HIR and TypeTable | compiler/hir/ (empty) | no HIR constructed | "HIR/TypeTable not yet implemented" | W04 |
 | Minimal end-to-end spine | compiler/driver/ (empty) | no binary produced | "Stage 1 driver not yet implemented" | W05 |
 | Type checker | compiler/check/ (empty) | no types checked | "type checker not yet implemented" | W06 |
@@ -160,5 +159,30 @@ Retired:
   TestStructLiteralDisambig, TestOptionalChainParse,
   TestNopanicOnMalformed (40 malformed-input cases), TestGolden (five
   golden fixtures under compiler/parse/testdata/).
+
+Rescheduled: (none this wave)
+
+### W03 — Resolution
+
+Added: (none this wave)
+
+Retired:
+- Module resolver (compiler/resolve/*.go) — confirmed retired by `go
+  test ./compiler/resolve/... -v`, with each wave-spec Verify command
+  producing its declared passing output: `TestModuleDiscovery -count=3`,
+  `TestModuleGraph`, `TestScopeLookup`, `TestTopLevelIndex`,
+  `TestModuleFirstFallback`, `TestQualifiedEnumVariant`,
+  `TestImportCycleDetection`, `TestCfgEvaluation`, `TestCfgDuplicates`,
+  `TestVisibilityEnforcement`. Proof surface: determinism-checked
+  filesystem discovery, ModuleGraph with sorted Order and Edges,
+  symbol-table scope chain, top-level indexing across every item kind
+  plus enum variant hoisting, module-first import fallback (reference
+  §18.7), qualified enum variant resolution across a FieldExpr+PathExpr
+  chain (reference §11.6), Tarjan-based import cycle detection that
+  covers self-edges and multi-module cycles, `@cfg` predicate evaluator
+  supporting `key = "value"`, `feature = "x"`, `not`, `all`, `any`,
+  nested combinators, duplicate-item detection across `@cfg` overlaps
+  (reference §50.1), and four-level visibility enforcement
+  (private / pub(mod) / pub(pkg) / pub — reference §53.1).
 
 Rescheduled: (none this wave)

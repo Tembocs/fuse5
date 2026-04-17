@@ -1,6 +1,6 @@
 {
-  "current_wave": "W02",
+  "current_wave": "W03",
   "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Parser+AST wave in closure phase. Parser and AST stub retired; STUBS.md W02 history block appended; WC002 logged. Next: commit W02 closure and enter W03 Resolution."
+  "notes": "Resolution wave in closure phase. Module resolver stub retired (DiscoverFromDir, ModuleGraph, SymbolTable, top-level indexing, module-first import fallback per §18.7, qualified enum variants per §11.6, Tarjan-based import cycle detection, @cfg evaluator per §50.1 including duplicate-item detection, four-level visibility enforcement per §53.1). STUBS.md W03 history block appended; WC003 logged. All 10 wave-spec Verify commands pass; full `go test ./...` green. Next: commit W03 closure and enter W04 HIR and TypeTable."
 }
