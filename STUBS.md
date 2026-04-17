@@ -33,14 +33,14 @@ number when it lands the feature.
 | Monomorphization | compiler/monomorph/ (empty) | no generic specialization | "monomorphization not yet implemented" | W08 |
 | Ownership, liveness, borrow rules, drop codegen | compiler/liveness/ (empty) | no ownership enforcement | "ownership/liveness not yet implemented" | W09 |
 | Pattern matching dispatch and exhaustiveness | compiler/check/ (empty) | no match dispatch | "pattern matching not yet implemented" | W10 |
-| Error propagation (`?` operator) | compiler/lower/ (empty) | no `?` lowering | "error propagation not yet implemented" | W11 |
-| Closures, capture, `move` prefix, Fn/FnMut/FnOnce | compiler/lower/ (empty) | no closure lifting | "closures not yet implemented" | W12 |
-| Trait objects (`dyn Trait`, vtables, object safety) | compiler/codegen/ (empty) | no dynamic dispatch | "trait objects not yet implemented" | W13 |
+| Error propagation (`?` operator) | compiler/lower/ (W05 spine only; no `?` lowering) | `?` operator emits a lowerer diagnostic | "error propagation not yet implemented" | W11 |
+| Closures, capture, `move` prefix, Fn/FnMut/FnOnce | compiler/lower/ (W05 spine only; no closure lifting) | closure expressions emit a lowerer diagnostic | "closures not yet implemented" | W12 |
+| Trait objects (`dyn Trait`, vtables, object safety) | compiler/codegen/ (W05 C11 subset; no dynamic dispatch) | `dyn Trait` use emits a codegen diagnostic | "trait objects not yet implemented" | W13 |
 | Compile-time evaluation (`const fn`, `size_of`, `align_of`) | compiler/ (not yet created consteval/) | no const evaluation | "const fn not yet implemented" | W14 |
-| MIR consolidation (casts, fn pointers, slice range, struct update, overflow arithmetic) | compiler/lower/ (empty) | no MIR produced | "MIR lowering not yet implemented" | W15 |
-| Runtime ABI (threads, channels, panic, IO) | runtime/src/ (empty) | no runtime | "runtime not yet implemented" | W16 |
-| Codegen C11 hardening (`@repr`, `@align`, `@inline`, intrinsics, variadic, debug info, perf baseline) | compiler/codegen/ (empty) | no C emitted | "C11 codegen not yet implemented" | W17 |
-| CLI, diagnostics, `fuse fmt/doc/repl`, incremental driver, Rule 6.17 audit | compiler/driver/ (empty) | Stage 1 CLI only knows `version` and `help` | "subcommand not yet implemented" | W18 |
+| MIR consolidation (casts, fn pointers, slice range, struct update, overflow arithmetic) | compiler/lower/ + compiler/mir/ (W05 minimal subset only) | non-spine forms emit lowerer diagnostics | "MIR lowering not yet implemented" | W15 |
+| Runtime ABI (threads, channels, panic, IO) | runtime/src/ (W05 fuse_rt_abort only; threads/channels/IO call abort with "not yet implemented") | stub runtime entries abort at runtime | "runtime not yet implemented" | W16 |
+| Codegen C11 hardening (`@repr`, `@align`, `@inline`, intrinsics, variadic, debug info, perf baseline) | compiler/codegen/ (W05 emitter only; no hardening) | hardening decorators are ignored by the W05 emitter | "C11 codegen not yet implemented" | W17 |
+| CLI, diagnostics, `fuse fmt/doc/repl`, incremental driver, Rule 6.17 audit | compiler/driver/ (W05 `build` subcommand only; no `run`/`check`/`test`/`fmt`/`doc`/`repl`, no incremental driver) | unimplemented subcommands exit non-zero with a usage message | "subcommand not yet implemented" | W18 |
 | Language server (LSP 3.17) | compiler/ (not yet created lsp/) | no LSP server | "fuse lsp not yet implemented" | W19 |
 | Stdlib core (traits, primitives, strings, collections, Cell/RefCell, Ptr.null, overflow methods) | stdlib/core/ (empty) | no stdlib | "stdlib core not yet implemented" | W20 |
 | Custom allocators (Allocator trait, parameterized collections) | stdlib/core/alloc/ (not yet created) | no allocator trait | "custom allocators not yet implemented" | W21 |
