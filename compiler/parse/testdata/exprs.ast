@@ -1,0 +1,44 @@
+File
+  FnDecl e vis=private
+    Return:
+      PathType I32
+    Block
+      Let
+        Bind a
+        OptField ?.y
+          Path x
+      Let
+        Bind b
+        IndexRange inclusive=false
+          Path arr
+          Lit INT 0
+          Lit INT 3
+      Let
+        Bind c
+        IndexRange inclusive=true
+          Path arr
+          (open)
+          Lit INT 9
+      Let
+        Bind d
+        Binary +
+          Path base
+          Binary *
+            Path extra
+            Lit INT 2
+      Let
+        Bind e
+        StructLit Point
+          Field x
+            Lit INT 0
+          Field y
+            Lit INT 0
+      Let
+        Bind f
+        StructLit Point
+          Field x
+            Lit INT 1
+          Base:
+            Path prev
+      Return
+        Path d

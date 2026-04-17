@@ -1,0 +1,19 @@
+File
+  StructDecl Header vis=private
+    Decorator @repr
+      Path C
+    Decorator @align
+      Lit INT 8
+    Field tag
+      PathType U8
+    Field len
+      PathType U32
+  FnDecl id vis=private
+    Decorator @inline
+    Param x own=none
+      PathType I32
+    Return:
+      PathType I32
+    Block
+      Return
+        Path x

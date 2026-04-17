@@ -1,0 +1,14 @@
+File
+  StructDecl Point vis=private
+    Field x
+      PathType I32
+    Field y
+      PathType I32
+  EnumDecl Shape
+    Variant Circle
+      PathType F64
+    Variant Rect
+      Field w
+        PathType F64
+      Field h
+        PathType F64

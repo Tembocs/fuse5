@@ -1,0 +1,9 @@
+fn e() -> I32 {
+    let a = x?.y;
+    let b = arr[0..3];
+    let c = arr[..=9];
+    let d = base + extra * 2;
+    let e = Point { x: 0, y: 0 };
+    let f = Point { x: 1, ..prev };
+    return d;
+}

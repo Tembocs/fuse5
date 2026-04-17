@@ -1,0 +1,6 @@
+struct Point { x: I32, y: I32 }
+
+enum Shape {
+    Circle(F64),
+    Rect { w: F64, h: F64 },
+}

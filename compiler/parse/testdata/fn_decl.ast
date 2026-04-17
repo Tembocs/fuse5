@@ -1,0 +1,13 @@
+File
+  FnDecl add vis=pub
+    Param x own=none
+      PathType I32
+    Param y own=none
+      PathType I32
+    Return:
+      PathType I32
+    Block
+      Return
+        Binary +
+          Path x
+          Path y

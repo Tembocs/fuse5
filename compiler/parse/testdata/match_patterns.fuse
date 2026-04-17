@@ -1,0 +1,11 @@
+fn describe(m: Msg) -> I32 {
+    return match m {
+        None => 0,
+        Some(v) => v,
+        Rect { w, h, .. } => w,
+        1 | 2 | 3 => 1,
+        1..=10 => 2,
+        v @ 11..=20 => v,
+        _ => 99,
+    };
+}

@@ -1,0 +1,56 @@
+File
+  FnDecl describe vis=private
+    Param m own=none
+      PathType Msg
+    Return:
+      PathType I32
+    Block
+      Return
+        Match
+          Path m
+          Arm
+            Ctor None rest=false
+            Block
+              Trailing:
+                Lit INT 0
+          Arm
+            Ctor Some rest=false
+              Bind v
+            Block
+              Trailing:
+                Path v
+          Arm
+            Ctor Rect rest=true
+              Field w
+              Field h
+            Block
+              Trailing:
+                Path w
+          Arm
+            OrPat
+              LitPat 1
+              LitPat 2
+              LitPat 3
+            Block
+              Trailing:
+                Lit INT 1
+          Arm
+            RangePat inclusive=true
+              Lit INT 1
+              Lit INT 10
+            Block
+              Trailing:
+                Lit INT 2
+          Arm
+            At v
+              RangePat inclusive=true
+                Lit INT 11
+                Lit INT 20
+            Block
+              Trailing:
+                Path v
+          Arm
+            Wildcard
+            Block
+              Trailing:
+                Lit INT 99

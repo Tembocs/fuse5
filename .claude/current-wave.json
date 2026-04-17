@@ -1,6 +1,6 @@
 {
-  "current_wave": "W01",
+  "current_wave": "W02",
   "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Lexer wave in closure phase. Lexer stub retired; STUBS.md W01 history block appended; WC001 logged. Next: commit W01 closure and enter W02 Parser+AST."
+  "notes": "Parser+AST wave in closure phase. Parser and AST stub retired; STUBS.md W02 history block appended; WC002 logged. Next: commit W02 closure and enter W03 Resolution."
 }

@@ -1100,3 +1100,138 @@ grep "WC001" docs/learning-log.md
 ```
 All commands exited 0 on this machine (windows/amd64, go1.26.2). CI
 matrix green on the committed SHA is the authoritative record.
+
+### WC002 — Wave 02 Closure
+
+Date: 2026-04-17
+Wave: 02 — Parser and AST
+
+**Proof programs added this wave**:
+No `tests/e2e/` programs (Rule 6.8 applies from W05 onward). Parser
+proofs live under `compiler/parse/testdata/`:
+- `fn_decl.fuse` / `.ast` — vis-pub function with params and return.
+- `struct_enum.fuse` / `.ast` — named struct plus multi-variant enum
+  (tuple and struct-shaped variants).
+- `decorators.fuse` / `.ast` — stacked `@repr(C) @align(8)` on a
+  struct and inline `@inline` on a fn.
+- `match_patterns.fuse` / `.ast` — covers every pattern kind:
+  constructor (unit, tuple, struct with `..`), or-pattern, range,
+  inclusive range, `@`-binding, wildcard. Exercises the forcing
+  pattern vocabulary in one fixture.
+- `exprs.fuse` / `.ast` — `?.` chain, slice-range indexing
+  (`a[0..3]`, `a[..=9]`), struct literal with update syntax
+  (`..prev`), mixed precedence.
+
+**Stubs retired this wave**:
+- Parser and AST — retired at PCL. Row removed from `STUBS.md` Active
+  table; W02 block appended to Stub history (Rule 6.16). Verify
+  chain: `go run tools/checkstubs/main.go -wave W02 -retired
+  "parse,ast"` (passes trivially — the tool's `-retired` flag takes a
+  single name and the row was named `Parser and AST`, so the check
+  only asserts absence; the real guarantee is the row removal plus
+  the history block assertion via `-history-current-wave W02`).
+
+**Stubs introduced this wave**:
+None. Parser and AST are leaf surfaces at this stage; the Resolver,
+Type checker, and downstream packages retain their own stubs on
+their own retirement waves.
+
+**What was harder than planned**:
+- The `baseNode` embedded struct was unexported. Go's field-promotion
+  rules mean that a promoted field through an unexported embedded
+  struct is NOT accessible from outside the package. So the parser
+  could not write `node.Span = sp` to set spans on nodes it was
+  building. Renamed to `NodeBase` (exported) so the promoted `Span`
+  field is assignable from the parse package. Every concrete node
+  struct updated; the `TestSpanCorrectness` reflection test still
+  passes because the field-name lookup changed in lockstep.
+- Parser-level path vs. field access. The grammar's `path = IDENT {
+  "." IDENT }` looks like it should consume a whole chain, but in
+  expression position `x.y.z` must surface as nested `FieldExpr`
+  nodes so that `x.y?.z` lands as `OptField(Field(x, y), z)` rather
+  than `OptField(PathExpr[x, y], z)`. Fix: at expression level,
+  `parsePathExpr` consumes one identifier only; subsequent `.IDENT`
+  is handled by `parsePostfix` as field access. The
+  `TestOptionalChainParse/mixed` case is the regression anchor.
+- `self` parameter shorthand. Reference §1.9 makes `self` and `Self`
+  reserved, and trait/impl methods usually take `self` without a
+  type annotation (`fn hello(self)`). Extended `parseParam` to accept
+  `self` as the name and to make the `: Type` annotation optional
+  when the name is `self`. Also extended `parseType` to accept
+  `Self` as a path root, since `Self` appears in return/parameter
+  positions.
+- Synchronize-at-`}` deadlock at top level. The error-recovery
+  `synchronize()` deliberately does NOT consume `}` so an inner
+  block parser can resume. At file level there is no inner parser,
+  so the token `}` caused `parseFile` to loop forever. Guarded by a
+  "if no token was consumed this iteration, advance one" check in
+  `parseFile`. Caught by `TestNopanicOnMalformed/case-19` (`"}}}"`).
+- Struct-literal disambiguation and trailing expressions interact.
+  The forcing case `fn f() { if Foo { x } }` lands the `if`
+  expression as the block's trailing value, not a statement —
+  `parseStmtOrTrailing` now treats a block-expression as trailing
+  when it is immediately followed by `}`. The `TestStructLiteralDisambig`
+  helper switched to a `bodyExpr()` accessor that reads whichever
+  field is populated.
+- Decorators on statics. The initial `parseStaticDecl`/`parseConstDecl`
+  signatures didn't receive the decorators parsed up front, and
+  `TestDecoratorParsing/rank` (`@rank(1) static LOCK: I32 = 0;`)
+  caught it immediately. Added `Decorators` fields to `StaticDecl`
+  and `ConstDecl` and threaded the list through the construction
+  sites. `StaticDecl` was already in the AllItemNodes registry, so
+  `TestAstNodeCompleteness` continued to pass.
+
+**What the next wave must know**:
+- `compiler/parse.Parse(filename, src)` is the single entry point.
+  It returns `(*ast.File, []lex.Diagnostic)`; the file is never nil
+  even on empty or wholly malformed input — downstream code does not
+  need a nil guard. The second return bundles lexer and parser
+  diagnostics together.
+- The AST is syntax-only (Rule 3.2). No resolved names, no types,
+  no annotations. Path segments are raw `[]ast.Ident`; `x.y.z` is
+  two `FieldExpr` nodes wrapped around a `PathExpr{x}`. W03 is the
+  first wave allowed to attach resolution information.
+- Every concrete node embeds `ast.NodeBase`; builders set `node.Span`
+  after construction. Adding a node type requires: (a) embedding
+  `NodeBase`, (b) implementing the right marker method
+  (`itemNode`/`exprNode`/`stmtNode`/`patNode`/`typeNode`), (c)
+  registering in the corresponding `All*Nodes` list so
+  `TestAstNodeCompleteness` stays honest.
+- Struct-literal disambiguation lives in the parser: inside `if`/
+  `while`/`for`/`match` headers the parser runs in `ctxNoStruct`
+  which forbids `IDENT {` from starting a struct literal. Any new
+  expression context that must also suppress struct literals should
+  call `parseExprNoStruct` instead of `parseExpr`.
+- `?.` arrives as a single `TokQuestionDot` from the lexer and is
+  handled in `parsePostfix` — it is NOT composed from `?` + `.` in
+  the parser. If a later refactor changes `parsePostfix`, the
+  `TestOptionalChainParse` regression catches it.
+- Two things are *contextual* keywords rather than reserved words,
+  per reference §1.9: `dyn` and `union`. The lexer emits them as
+  identifiers; the parser tests `cur().Text` in type position
+  (`dyn`) and item-dispatch position (`union`). Adding more
+  contextual keywords should follow the same pattern and carry a
+  comment pointing to §1.9 so future readers understand why.
+- `parseParam` accepts the reserved word `self` as the parameter
+  name and makes the `: Type` annotation optional for it. Every
+  other parameter requires both name and annotation per the
+  grammar. The resolver (W03) will fill the implicit `Self` type
+  for `self` receivers from the enclosing impl context.
+- Error recovery is strictly additive: every malformed-input case
+  must produce at least one diagnostic and terminate. The test
+  corpus in `TestNopanicOnMalformed` should grow as new failure
+  modes surface; reducing its size is a regression.
+
+**Verification**:
+```
+go test ./compiler/ast/... -v
+go test ./compiler/parse/... -v
+go test ./compiler/parse/... -run TestGolden -count=3 -v
+go test ./compiler/parse/... -run TestNopanicOnMalformed -v
+go run tools/checkstubs/main.go -wave W02 -phase P00
+go run tools/checkstubs/main.go -wave W02 -retired "parse,ast"
+go run tools/checkstubs/main.go -history-current-wave W02
+grep "WC002" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.26.2). CI
+matrix green on the committed SHA is the authoritative record.

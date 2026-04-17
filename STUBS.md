@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Parser and AST | compiler/parse/ (empty) | no AST produced | "parser not yet implemented" | W02 |
 | Module resolver | compiler/resolve/ (empty) | no resolution performed | "resolver not yet implemented" | W03 |
 | HIR and TypeTable | compiler/hir/ (empty) | no HIR constructed | "HIR/TypeTable not yet implemented" | W04 |
 | Minimal end-to-end spine | compiler/driver/ (empty) | no binary produced | "Stage 1 driver not yet implemented" | W05 |
@@ -144,5 +143,22 @@ Retired:
   TestOptionalChainToken, TestBomRejection, TestSpanStability,
   TestLexerFuzz, TestGolden (four golden fixtures under
   compiler/lex/testdata/).
+
+Rescheduled: (none this wave)
+
+### W02 — Parser and AST
+
+Added: (none this wave)
+
+Retired:
+- Parser and AST (compiler/ast/*.go, compiler/parse/*.go) — confirmed
+  retired by `go test ./compiler/ast/... -v`, `go test
+  ./compiler/parse/... -v`, and `go test ./compiler/parse/... -run
+  TestGolden -count=3 -v`. Proof surface: TestAstNodeCompleteness,
+  TestSpanCorrectness, TestItemParsing, TestExprPrecedence,
+  TestTypeExprs, TestPatternParsing, TestDecoratorParsing,
+  TestStructLiteralDisambig, TestOptionalChainParse,
+  TestNopanicOnMalformed (40 malformed-input cases), TestGolden (five
+  golden fixtures under compiler/parse/testdata/).
 
 Rescheduled: (none this wave)
