@@ -1,6 +1,6 @@
 {
-  "current_wave": "W11",
-  "current_phase": "PCL",
+  "current_wave": "W12",
+  "current_phase": "P00",
   "updated": "2026-04-17",
-  "notes": "Error Propagation wave in closure phase. Error-propagation stub retired: `?` typecheck on Result/Option-shaped enums (checker inferTry requires an `Err`/`None` variant and matching enclosing-fn return type), `?` lowering as branch-and-early-return (lowerer emits TermIfEq against Err discriminant + distinct early-return and success blocks), two e2e proofs (error_propagation_err.fuse exits 43 via Err propagation; error_propagation_ok.fuse exits 0 via Ok continuation). Reuses W10's control-flow primitives (TermIfEq + TermJump + UseBlock). STUBS.md W11 history block appended; WC011 logged using the Rule 10.2 mandated 5-field template. Fifth full wave under Rule 9.5 three-commit discipline: P00 audit (a33c55e), implementation (f9018af), PCL (this commit). Next: commit W11 PCL and enter W12 Closures."
+  "notes": "Closures and Callable Traits wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W12 -phase P00` exits 0: no overdue stubs, closures row Active with retiring wave W12. Sixth wave under Rule 9.5 discipline. Next: implementation commit(s) for capture analysis (reads→ref/Copy, writes→mutref, move→owned per §15.7), `move` prefix reclassification (§15.3), escape classification (§15.5 — W09-P01-T06's consumer), environment-struct shape + closure lifting, Fn/FnMut/FnOnce intrinsic traits with auto-impl, call desugaring `f(args)→f.call(args)`, and e2e proof program `closure_capture.fuse`."
 }
