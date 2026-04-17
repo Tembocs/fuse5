@@ -1,0 +1,4 @@
+let a = r"plain";
+let b = r#"one"#;
+let c = r##"two "# inside"##;
+let d = r#abc;

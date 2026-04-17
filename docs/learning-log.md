@@ -984,3 +984,119 @@ grep "WC000" docs/learning-log.md
 ```
 All commands exited 0 on this machine (windows/amd64, go1.26.2). CI
 matrix green on the committed SHA is the authoritative record.
+
+### WC001 — Wave 01 Closure
+
+Date: 2026-04-17
+Wave: 01 — Lexer
+
+**Proof programs added this wave**:
+No `tests/e2e/` programs this wave — Rule 6.8 requires end-to-end proof
+programs from W05 onward, when the minimal spine exists. The lexer's
+behavioral proofs instead live under `compiler/lex/testdata/`:
+- `basic.fuse` / `basic.tokens` — realistic `fn main() -> I32` shape;
+  covers keywords, ident, arrow, braces, numeric-with-suffix literal,
+  semicolons.
+- `operators.fuse` / `operators.tokens` — exercises `?.`, `..=`, `<<`,
+  compound assignment `+=` and `<<=`. Forces the longest-match contract
+  from reference §1.10 and §5.
+- `comments.fuse` / `comments.tokens` — line comment followed by a
+  nested block comment followed by a real token. Confirms the scanner
+  skips trivia in order and the nested-depth tracker returns to zero.
+- `rawstrings.fuse` / `rawstrings.tokens` — the canonical mix: `r"..."`,
+  `r#"..."#`, `r##"..."##`, and the forcing counter-example `r#abc`
+  which must tokenize as IDENT HASH IDENT.
+
+**Stubs retired this wave**:
+- Lexer and token model — retired at PCL. Stub row removed from
+  `STUBS.md` Active table; W01 block appended to Stub history per
+  Rule 6.16. Verify chain:
+  `go run tools/checkstubs/main.go -wave W01 -retired lexer` (passes),
+  `go run tools/checkstubs/main.go -history-current-wave W01` (passes).
+
+**Stubs introduced this wave**:
+None. The lexer is a leaf subsystem — parser, resolver, and later
+stages depend on tokens but no new stubs were added this wave. The
+parser stub remains in the Active table and retires in W02.
+
+**What was harder than planned**:
+- The overdue-stub rule was off-by-one (L016). W00 shipped with CI green
+  because W00 never exercised the P00-overdue code path — only
+  `-audit-seed`. W01's first Phase 00 run surfaced the bug immediately.
+  Fix was three edits: `tools/checkstubs/main.go` `<=` → `<`,
+  `docs/rules.md` §6.15 rewording, `docs/audit.md` §A4 mirror, plus a
+  regression test `TestCheckWaveSameWaveNotOverdue`. Roughly 20 minutes
+  of diagnosis before any lexer code was written.
+- Raw-string recognition vs. identifier-prefix collision (reference
+  §1.10) required routing the `r"` / `r#"` decision *before* the
+  generic identifier consumer, not after. The first cut tried to
+  detect raw-string opener post-identifier and backtrack, which
+  immediately tangled span bookkeeping. Replacing it with a
+  `isRawStringOpener` lookahead on the `r` branch was cleaner and kept
+  `r#abc` correct by construction rather than by a special case.
+- Char literal unicode escape `'\u{1F600}'` had an off-by-one in the
+  initial `scanChar` (checked `s.src[s.off-1] == '{'` after advancing
+  both `\` and `u`). Caught by the first test run; fix was to look at
+  the byte that followed the escape character, not the escape itself.
+- `.gitattributes` was required for golden stability on Windows. The
+  Write tool produces LF content, but without an explicit text
+  attribute a Windows checkout of testdata `.fuse` files can mutate
+  line endings on the way through git, shifting spans. Added
+  `.gitattributes` enforcing LF for `*.fuse`, `*.tokens`, `*.golden`.
+  The golden-comparison path also normalizes CRLF→LF defensively so a
+  clone that predates the attributes change still compares cleanly.
+
+**What the next wave must know**:
+- `compiler/lex.Scanner` is the canonical front door. Construct with
+  `NewScanner(filename, src)`, call `Run()`, then read `Tokens()` and
+  `Errors()`. The final token is always `TokEOF`; callers that iterate
+  must handle it or trim it. `Run()` is idempotent and resets state on
+  re-entry.
+- `TokenKind` has a stable `String()` via `kindNames`. New kinds must
+  add a row there; `TestTokenKindCoverage` enforces the invariant.
+  New keywords must appear in both `keywords` (map for lookup) and
+  `keywordList` (ordered list for deterministic iteration). A test
+  asserts the two sets agree.
+- Span columns count UTF-8 bytes past the start of the logical line,
+  not grapheme clusters. Parser and diagnostic code must match this
+  contract; a later renderer can widen columns for display.
+- `r#abc` tokenization is the forcing example from reference §1.10
+  and is covered by the `rawstrings` golden. Any parser change that
+  stops consuming `HASH` between idents will be caught by the golden,
+  not by a unit test.
+- `?.` is a single `TokQuestionDot` by longest match; the parser must
+  handle that token directly and not try to compose `?` + `.`
+  (reference §1.10, §5.6). Tokenizing `x ? .y` as three tokens
+  (QUESTION, DOT, …) is the deliberate fall-back when whitespace
+  breaks the longest match.
+- Lexical errors emitted so far: BOM rejection, unterminated block
+  comment, unterminated raw string, unterminated/malformed character
+  literal, unterminated string literal, unexpected character. Each
+  diagnostic carries a primary span and a one-line message (Rule 6.17).
+  When W18 lands the diagnostic pipeline, these need to be wired
+  through the shared `compiler/diagnostics` package rather than the
+  local `Diagnostic` struct — but the shape (span + message + hint)
+  is already correct.
+- There is no `TokUnderscore`: the character `_` lexes as a plain
+  identifier. Patterns and let-bindings that treat `_` as a wildcard
+  must do so at the parser/HIR layer against the identifier text.
+  This matches reference §1.9 where `_` is not in the reserved-word
+  list.
+- Numeric literals carry their suffix as part of `Token.Text`; the
+  scanner does not validate suffix text (reference §1.10 requires
+  normalization at the HIR-to-MIR boundary, not at lex time). The
+  parser's first pass should emit `TokInt`/`TokFloat` through an
+  unchanged text field; the checker later interprets `i32`, `usize`,
+  `f64`, etc.
+
+**Verification**:
+```
+go test ./compiler/lex/... -v
+go test ./compiler/lex/... -run TestGolden -count=3 -v
+go run tools/checkstubs/main.go -wave W01 -phase P00
+go run tools/checkstubs/main.go -wave W01 -retired lexer
+go run tools/checkstubs/main.go -history-current-wave W01
+grep "WC001" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.26.2). CI
+matrix green on the committed SHA is the authoritative record.

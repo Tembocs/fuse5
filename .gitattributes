@@ -1,0 +1,5 @@
+* text=auto
+
+*.fuse text eol=lf
+*.tokens text eol=lf
+*.golden text eol=lf

@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Lexer and token model | compiler/lex/ (empty) | no tokens emitted | "lexer not yet implemented" | W01 |
 | Parser and AST | compiler/parse/ (empty) | no AST produced | "parser not yet implemented" | W02 |
 | Module resolver | compiler/resolve/ (empty) | no resolution performed | "resolver not yet implemented" | W03 |
 | HIR and TypeTable | compiler/hir/ (empty) | no HIR constructed | "HIR/TypeTable not yet implemented" | W04 |
@@ -129,5 +128,21 @@ Added:
   created) — documentation wave, no stub — retires W30
 
 Retired: (none this wave — W00 is the seeding wave)
+
+Rescheduled: (none this wave)
+
+### W01 — Lexer
+
+Added: (none this wave)
+
+Retired:
+- Lexer and token model (compiler/lex/scanner.go, compiler/lex/token.go,
+  compiler/lex/span.go) — confirmed retired by `go test
+  ./compiler/lex/... -v` and `go test ./compiler/lex/... -run TestGolden
+  -count=3 -v`. Proof surface: TestTokenKindCoverage, TestKeywords,
+  TestLiterals, TestNestedBlockComment, TestRawStringGuard,
+  TestOptionalChainToken, TestBomRejection, TestSpanStability,
+  TestLexerFuzz, TestGolden (four golden fixtures under
+  compiler/lex/testdata/).
 
 Rescheduled: (none this wave)
