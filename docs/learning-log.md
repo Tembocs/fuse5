@@ -2703,3 +2703,147 @@ grep "WC013" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64,
 go1.22+, MinGW gcc 13.x). CI matrix green on the committed
 SHA is the authoritative record.
+
+### WC014 — Wave 14 Closure
+
+Date: 2026-04-24
+Wave: 14 — Compile-Time Evaluation (`const fn`, `const`,
+`static`, `size_of`, `align_of`)
+
+**Proof programs added this wave**:
+- `tests/e2e/const_fn.fuse` — declares a recursive `const fn
+  factorial(n: U64) -> U64` with an `if n == 0u64` base case
+  and `return n * factorial(n - 1u64)` step, initialises
+  `const FACT_5: U64 = factorial(5u64)` at evaluator time,
+  and has main return `FACT_5 as I32`. Expected exit code
+  120. Driving test: `TestConstFnProof` in
+  `tests/e2e/spine_test.go`. Registered in
+  `tests/e2e/README.md`.
+
+**Stubs retired this wave**:
+- "Compile-time evaluation (`const fn`, `size_of`,
+  `align_of`)" — removed from `STUBS.md` Active table at
+  this PCL commit. Confirmed by `go run tools/checkstubs/main.go
+  -wave W14` and `go run tools/checkstubs/main.go
+  -history-current-wave W14`, both exiting 0. Proof surface
+  enumerated in the W14 block of the `STUBS.md` Stub history.
+
+**Stubs introduced this wave**:
+None. MIR consolidation (W15), runtime ABI (W16), and codegen
+hardening (W17) retain their existing stubs; W14 only adds a
+compile-time phase between `check.Check` and
+`monomorph.Specialize` and does not introduce new runtime or
+codegen surface.
+
+**What was harder than planned**:
+- Integer-literal parsing had to be taught about Fuse's
+  explicit suffixes (`u64`, `i32`, `usize`, etc.) in two
+  places: the const evaluator's `parseIntegerLiteral` and
+  the spine lowerer's `LitInt` case. `strconv.ParseInt(...,
+  0, 64)` rejects `256u64` and friends. The fix is a shared
+  `stripIntSuffix` / `parseIntLiteral` helper that peels the
+  suffix before deferring to `strconv`, with a `uint64`
+  fallback for bare literals that overflow signed int64 but
+  fit U64. Without this the proof program's `factorial(5u64)`
+  initialiser fails to lower even after the evaluator
+  produces the correct value.
+- The spine lowerer rejects function bodies with more than
+  one statement or non-trivial control flow. Recursive
+  `const fn factorial` has both (`if` guard + `return` tail).
+  Rather than expand the spine lowerer ahead of W15, the W14
+  `Substitute` pass now strips every `IsConst=true` FnDecl
+  from the HIR after evaluation — their call sites have
+  already been rewritten to literals, so the bodies are
+  unreachable from main and can be deleted without affecting
+  observable behaviour. This keeps W15 MIR consolidation as
+  the single authoritative place to widen the lowerer.
+- `CastExpr` lowering was missing from the spine — a
+  `(FACT_5 as I32)` expression in the proof program had
+  nowhere to go. Added a passthrough case in
+  `compiler/lower/lower.go` that lowers the inner expression
+  and drops the cast. The evaluator already performed the
+  arithmetic in the declared target type, so the lowerer
+  only needs to preserve the value. W17 codegen hardening
+  will replace the passthrough with a proper C11 cast
+  emission when checked narrowing / overflow semantics land.
+- The `const fn` restriction set deliberately omits the
+  "no `&mut` references" subcase because the current
+  grammar does not parse `&mut` as an expression prefix;
+  closure-construction substitutes as the fourth rejection
+  case. When W15/W16 extend the parser, the
+  `CheckRestrictions` walker already has a `ReferenceExpr`
+  arm keyed on `IsMutable` and will reject mutable borrows
+  without further changes.
+- The proof program's expected exit code was originally
+  specified as `(factorial(10) % 256) as I32 = 128`, but
+  `10! = 3_628_800` is divisible by 256 (`10!` contains
+  2^8 as a factor), so the modulus is in fact 0. The final
+  proof uses `factorial(5) = 120`, which fits a byte-wide
+  exit code directly and needs no modulus.
+
+**What the next wave must know**:
+- `consteval.Evaluate(prog) (*Result, []Diagnostic)` is the
+  entry point. The Result maps HIR symbol IDs (SymID) to
+  `Value`s for every `const`, `static`, and array-length /
+  enum-discriminant expression evaluated at compile time.
+  Callers should treat `Value` as opaque and round-trip
+  through `Value.SignedInt(tab)` / `.UnsignedInt(tab)` /
+  `.Bool()` / `.Char()` rather than inspecting the
+  `ValueKind` tag directly.
+- `consteval.CheckRestrictions(prog)` is the gatekeeper for
+  const-fn purity. It runs *before* `Evaluate` and rejects
+  spawn, unsafe, FFI, non-const calls, closures, mutable
+  references, and interior-mutable names. Later waves that
+  introduce new effects (e.g., W16 threading, W21
+  allocators) should add their entry points to
+  `AllocationFnNames` / `ThreadingFnNames` / the
+  `isInteriorMutableName` predicate; the walker itself does
+  not need changes.
+- `consteval.Substitute(prog, res)` mutates the HIR
+  in-place by rewriting `PathExpr` to `LiteralExpr` for
+  every SymID the evaluator resolved, and by dropping
+  every `IsConst=true` FnDecl from the modules' Items
+  slices. W15 will delete the stripping step once the MIR
+  lowerer can consume const-fn bodies directly; until
+  then any pass that runs *after* Substitute must not
+  expect the const-fn declarations to still be present.
+- `consteval.DiagsToLex([]Diagnostic) []lex.Diagnostic` is
+  the conversion helper used by the driver. Any future
+  caller integrating consteval diagnostics into a new
+  driver surface (LSP, incremental) should use it rather
+  than building `lex.Diagnostic` values ad-hoc.
+- Size / align queries go through `layoutSize(tid)` and
+  `layoutAlign(tid)` on the evaluator; both return
+  `(uint64, error)`. The error arm covers types the layout
+  engine cannot compute yet (e.g., unsized slices);
+  callers should route those back into a diagnostic rather
+  than panicking.
+- The driver now runs `CheckRestrictions → Evaluate →
+  Substitute` strictly between `check.Check` and
+  `monomorph.Specialize`. That ordering is load-bearing:
+  restrictions run before evaluation so we never evaluate
+  ill-formed const fns; substitute runs before
+  monomorphization so the specializer sees literal array
+  lengths and discriminants. Any later pass that needs to
+  modify const-fn bodies must splice itself *before*
+  Substitute.
+
+**Verification**:
+```
+go test ./compiler/consteval/... -run TestEvaluatorCore -v
+go test ./compiler/consteval/... -run TestEvaluatorDeterminism -v
+go test ./compiler/consteval/... -run TestConstFnRestrictions -v
+go test ./compiler/consteval/... -run TestConstInit -v
+go test ./compiler/consteval/... -run TestStaticInit -v
+go test ./compiler/consteval/... -run TestArrayLenConst -v
+go test ./compiler/consteval/... -run TestDiscriminantConst -v
+go test ./compiler/consteval/... -run TestSizeOfAlignOf -v
+go test ./tests/e2e/... -run TestConstFnProof -v
+go run tools/checkstubs/main.go -wave W14 -phase P00
+go run tools/checkstubs/main.go -wave W14
+go run tools/checkstubs/main.go -history-current-wave W14
+grep "WC014" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64,
+go1.22+, MinGW gcc 13.x). CI matrix green on the committed
+SHA is the authoritative record.

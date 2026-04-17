@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Compile-time evaluation (`const fn`, `size_of`, `align_of`) | compiler/ (not yet created consteval/) | no const evaluation | "const fn not yet implemented" | W14 |
 | MIR consolidation (casts, fn pointers, slice range, struct update, overflow arithmetic) | compiler/lower/ + compiler/mir/ (W05 minimal subset only) | non-spine forms emit lowerer diagnostics | "MIR lowering not yet implemented" | W15 |
 | Runtime ABI (threads, channels, panic, IO) | runtime/src/ (W05 fuse_rt_abort only; threads/channels/IO call abort with "not yet implemented") | stub runtime entries abort at runtime | "runtime not yet implemented" | W16 |
 | Codegen C11 hardening (`@repr`, `@align`, `@inline`, intrinsics, variadic, debug info, perf baseline) | compiler/codegen/ (W05 emitter only; no hardening) | hardening decorators are ignored by the W05 emitter | "C11 codegen not yet implemented" | W17 |
@@ -476,5 +475,48 @@ Retired:
   through the full pipeline, exits 42, and the test exercises
   IsObjectSafeWithTab + BuildVtableLayout + EmitVtable +
   EmitFatPointerStruct on the checked trait).
+
+Rescheduled: (none this wave)
+
+### W14 — Compile-Time Evaluation (`const fn`, `const`, `static`, `size_of`, `align_of`)
+
+Added: (none this wave)
+
+Retired:
+- Compile-time evaluation (`const fn`, `const`, `static`,
+  `size_of`, `align_of`) (compiler/consteval/doc.go,
+  compiler/consteval/value.go, compiler/consteval/eval.go,
+  compiler/consteval/intrinsic.go, compiler/consteval/restrict.go,
+  compiler/consteval/substitute.go, compiler/consteval/diag.go,
+  compiler/consteval/eval_test.go, compiler/consteval/restrict_test.go,
+  compiler/consteval/phase_test.go, and driver integration in
+  compiler/driver/build.go between `check.Check` and
+  `monomorph.Specialize`) — confirmed retired by
+  `go test ./compiler/consteval/... -run TestEvaluatorCore -v`,
+  `go test ./compiler/consteval/... -run TestEvaluatorDeterminism -v`,
+  `go test ./compiler/consteval/... -run TestConstFnRestrictions -v`,
+  `go test ./compiler/consteval/... -run TestConstInit -v`,
+  `go test ./compiler/consteval/... -run TestStaticInit -v`,
+  `go test ./compiler/consteval/... -run TestArrayLenConst -v`,
+  `go test ./compiler/consteval/... -run TestDiscriminantConst -v`,
+  `go test ./compiler/consteval/... -run TestSizeOfAlignOf -v`, and
+  `go test ./tests/e2e/... -run TestConstFnProof -v`.
+  Proof surface: `TestEvaluatorCore` (7 sub-cases covering
+  integer-literal, arithmetic, bool-logic, hex-and-binary
+  literals, const-fn-call, recursive const-fn `factorial(10) =
+  3628800`, and shift-and-cast), `TestEvaluatorDeterminism`
+  (three independent evaluator runs produce string-equal
+  output), `TestConstFnRestrictions` (FFI calls, non-const
+  calls, `unsafe` blocks, and closure construction rejected
+  inside const-fn bodies), `TestConstInit` and `TestStaticInit`
+  (const / static initializers evaluated and substituted in
+  place), `TestArrayLenConst` (array length expression
+  evaluated before monomorphization), `TestDiscriminantConst`
+  (enum discriminants 0/1/2 computed), `TestSizeOfAlignOf`
+  (bool/i8/i16/i32/i64/u32/char/unit/tuple/array layouts
+  match typetable), and e2e `TestConstFnProof`
+  (const_fn.fuse: recursive `const fn factorial` called from
+  `const FACT_5: U64 = factorial(5u64)`, substituted into
+  `return FACT_5 as I32`, produces exit code 120).
 
 Rescheduled: (none this wave)

@@ -37,6 +37,7 @@ Go test that executes it.
 | `error_propagation_ok.fuse` | W11 | `0` | (empty) | `TestErrorPropagation/run-true-continues-ok` |
 | `closure_capture.fuse` | W12 | `42` | (empty) | `TestClosureCaptureRuns` in `tests/e2e/closure_capture_test.go` |
 | `dyn_dispatch.fuse` | W13 | `42` (structural front-end proof; runtime dispatch is W15+) | (empty) | `TestDynDispatchProof` in `tests/e2e/dyn_dispatch_test.go` |
+| `const_fn.fuse` | W14 | `120` (`const FACT_5 = factorial(5u64)` evaluated at compile time) | (empty) | `TestConstFnProof` in `tests/e2e/spine_test.go` |
 
 ## Contract
 
