@@ -1,6 +1,6 @@
 {
   "current_wave": "W09",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Ownership and Liveness wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W09 -phase P00` exits 0: no overdue stubs, 'Ownership, liveness, borrow rules, drop codegen' row Active with retiring wave W09. Third wave under Rule 9.5 discipline. Next: implementation commit(s) for ownership contexts, the four borrow/move structural rules (no-borrow-in-field, return-borrow, mutref-aliasing, use-after-move), closure escape classification (§15.5), liveness computation with drop-intent insertion, destructor codegen, and 6 e2e proof fixtures (drop_observable + 5 rejection fixtures)."
+  "notes": "Ownership and Liveness wave in closure phase. `Ownership, liveness, borrow rules, drop codegen` stub retired: §54.1 no-borrow-in-field, §54.6 return-borrow-rule, §54.7 mutref-aliasing (handles both source `ref/mutref x: T` and synthetic `KindRef/KindMutref` shapes), use-after-move tracking, §15.5 closure escape classifier, DropIntent collection for locals with `impl Drop` blocks, MIR OpDrop opcode + codegen destructor emission. Driver runs Analyze between monomorph and lower. Proof surface: 11 liveness tests, 2 codegen tests (drop-metadata + destructor-emit), e2e TestBorrowRejections (5 sub-cases) + TestDropObservable. STUBS.md W09 history block appended; WC009 logged using the Rule 10.2 mandated 5-field template. Third full wave under Rule 9.5 three-commit discipline: P00 audit (30c7a62), implementation (6dea79a), PCL (this commit). Next: commit W09 PCL and enter W10 Pattern Matching."
 }

@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Ownership, liveness, borrow rules, drop codegen | compiler/liveness/ (empty) | no ownership enforcement | "ownership/liveness not yet implemented" | W09 |
 | Pattern matching dispatch and exhaustiveness | compiler/check/ (W06 type checker only; no match dispatch/exhaustiveness) | match arms type-check but exhaustiveness is not enforced | "pattern matching not yet implemented" | W10 |
 | Error propagation (`?` operator) | compiler/lower/ (W05 spine only; no `?` lowering) | `?` operator emits a lowerer diagnostic | "error propagation not yet implemented" | W11 |
 | Closures, capture, `move` prefix, Fn/FnMut/FnOnce | compiler/lower/ (W05 spine only; no closure lifting) | closure expressions emit a lowerer diagnostic | "closures not yet implemented" | W12 |
@@ -332,5 +331,35 @@ Retired:
   and e2e proofs `TestIdentityGeneric` (`identity_generic.fuse`
   exit 42) + `TestMultipleInstantiations`
   (`multiple_instantiations.fuse` exit 42).
+
+Rescheduled: (none this wave)
+
+### W09 — Ownership and Liveness
+
+Added: (none this wave)
+
+Retired:
+- Ownership, liveness, borrow rules, drop codegen
+  (compiler/liveness/liveness.go,
+  compiler/liveness/liveness_test.go, plus MIR OpDrop and codegen
+  destructor emission in compiler/mir/mir.go and
+  compiler/codegen/c11.go, plus driver wiring in
+  compiler/driver/build.go) — confirmed retired by
+  `go test ./compiler/liveness/... -v` and each wave-spec Verify
+  command. Proof surface: `TestOwnershipContexts`,
+  `TestNoBorrowInField`, `TestReturnBorrowRule`
+  (no-borrow-param-rejected), `TestMutrefAliasing`
+  (two-mutref-same-target, mutref-and-ref-same-target),
+  `TestUseAfterMove` (synthetic let/move/use scenario),
+  `TestClosureEscape` (ref-param closure returned from fn),
+  `TestLiveAfter`, `TestLastUse`, `TestDropIntent`,
+  `TestDestructionOnAllPaths`, `TestSingleLiveness` (umbrella,
+  idempotency), `TestDropTraitMetadata`,
+  `TestDestructorCallEmitted` (codegen), and e2e
+  `TestBorrowRejections` with 5 sub-cases
+  (reject_borrow_in_field, reject_return_local_borrow,
+  reject_aliased_mutref, reject_use_after_move,
+  reject_escaping_borrow_closure) + `TestDropObservable`
+  asserting non-empty DropIntent metadata.
 
 Rescheduled: (none this wave)

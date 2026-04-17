@@ -2140,3 +2140,137 @@ grep "WC008" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64, go1.22+,
 MinGW gcc 13.x). CI matrix green on the committed SHA is the
 authoritative record.
+
+### WC009 — Wave 09 Closure
+
+Date: 2026-04-17
+Wave: 09 — Ownership and Liveness
+
+**Proof programs added this wave**:
+- `tests/e2e/drop_observable.fuse` — source-level record of the
+  Drop-trait shape; the e2e test `TestDropObservable` drives the
+  liveness pass against a synthetic HIR Drop scenario and
+  asserts that `Result.DropIntents` is non-empty with a
+  non-empty `LocalName` and non-zero `Type`. The binary-level
+  observable-exit path (run the program, observe Drop via a
+  stdlib counter) needs multi-statement fn bodies plus a
+  stdlib surface — neither is in scope until W15+ / W22+. The
+  .fuse fixture's header documents this explicitly.
+- `tests/e2e/reject_borrow_in_field.fuse` — §54.1 rejection
+  fixture. Source-level `inner: ref I32` does not parse because
+  the W05-vintage grammar lacks a `ref T` type constructor; the
+  .fuse fixture is kept as a normative statement of intent, and
+  `TestBorrowRejections/reject_borrow_in_field` exercises the
+  rule via a synthetic HIR program (same predicate, same
+  diagnostic text).
+- `tests/e2e/reject_return_local_borrow.fuse` — §54.6 rejection
+  fixture. Same grammar limitation (`-> ref T` not parsable);
+  synthetic HIR exercises the rule.
+- `tests/e2e/reject_aliased_mutref.fuse` — §54.7 rejection
+  fixture that DOES parse because `mutref x: T` is a legal
+  parameter form; the driver fails the build with the §54.7
+  diagnostic via the full pipeline.
+- `tests/e2e/reject_use_after_move.fuse` — §14 rejection
+  fixture. Use-after-move needs multi-statement bodies;
+  synthetic HIR exercises the rule.
+- `tests/e2e/reject_escaping_borrow_closure.fuse` — §15.5
+  rejection fixture. Closure returned from a fn is not lowerable
+  at W09's spine; synthetic HIR exercises the escape classifier.
+
+All seven fixtures are registered in `tests/e2e/README.md` with
+explicit "N/A (synthetic HIR assertion)" notes where the source
+surface can't yet exercise the rule. The registry stays honest;
+future waves that extend the grammar (ref/mutref as type
+constructors) or the spine (multi-statement bodies) will reshape
+these fixtures into binary-producing proofs without changing the
+underlying rules.
+
+**Stubs retired this wave**:
+- "Ownership, liveness, borrow rules, drop codegen" — removed
+  from `STUBS.md` Active table at this PCL commit. Confirmed by
+  `go run tools/checkstubs/main.go -wave W09` and
+  `go run tools/checkstubs/main.go -history-current-wave W09`,
+  both exiting 0. Proof surface is enumerated in the W09 block
+  of the `STUBS.md` Stub history.
+
+**Stubs introduced this wave**:
+None. W09 retires the one stub it owns. Pattern matching (W10),
+error propagation (W11), closure capture (W12), and Drop-trait
+body lowering (W15 MIR consolidation) keep their existing stubs
+with their existing retirement waves.
+
+**What was harder than planned**:
+- The W05-vintage grammar has no `ref T` / `mutref T` type
+  constructor — ownership is a parameter modifier
+  (`ref a: T`), not a type wrapper. §54.1 no-borrow-in-field
+  and §54.6 return-borrow violations therefore can't be spelled
+  in source today; they ARE spellable at the HIR/TypeTable level
+  via `KindRef` / `KindMutref`, which is exactly what the
+  liveness pass consults. The rule is right; the e2e proofs
+  split between source-level (for the one rule that parses:
+  aliased-mutref) and synthetic HIR (for the other four). This
+  is the honest shape of the W09 proof surface.
+- Use-after-move diagnostics require multi-statement fn bodies
+  (`let x = y; let z = x; return x;` — two let-bindings and a
+  return). The W05 spine lowerer rejects any body with more than
+  one statement, so the use-after-move proof runs against
+  synthetic HIR; when the spine expands at W15+, the fixture
+  converts into a compilable rejection.
+- Closure escape classification at W09 stands in for the full
+  capture analysis that W12 delivers. Today's proxy is "any
+  closure whose parameter list contains a ref/mutref type is
+  treated as non-escaping at return/spawn sites". This catches
+  the canonical cases the wave-spec calls out without
+  overreaching; once W12 lands real capture analysis, the rule
+  tightens to the §15.5 letter.
+- `checkMutrefAliasing` originally keyed on `TypeOf()` alone,
+  but the parser stores ownership as `Param.Ownership` (not as
+  a wrapper TypeId). `borrowShapeOfParam` normalizes both
+  encodings so the same predicate handles source-driven and
+  synthetic fixtures.
+
+**What the next wave must know**:
+- `liveness.Analyze(prog)` is the single entry; driver already
+  calls it between `monomorph.Specialize` and `lower.Lower`.
+  The returned `Result.DropIntents` is the authoritative
+  destructor-call metadata; W15 MIR consolidation should emit
+  `mir.Builder.Drop` calls from this metadata at end-of-scope
+  for every intent, and codegen already emits
+  `<TypeName>_drop(&rN);` for each `OpDrop`.
+- `liveness.TypeContainsBorrow` is the exported §54.1 predicate;
+  W10 pattern matching and W12 closures should reuse it rather
+  than re-traversing type structures.
+- `liveness.BorrowShapeOfParam` (internal — exposed indirectly
+  via the tests) normalizes source-level ownership and
+  TypeTable-level borrow wrappers. Future passes that reason
+  about borrow kinds should route through the same helper.
+- Use-after-move is tracked per-block with a live/moved set
+  keyed by local name. Joins across branches are not yet modeled
+  (every arm starts from the enclosing block's state); W10
+  match-exhaustiveness work will need to unify the per-arm sets
+  when reporting use-after-move that straddles a match.
+- The W09 escape-classifier is a proxy. W12 will replace it with
+  true capture analysis; the wire protocol (diagnose at the
+  SpawnExpr / ReturnStmt site, hint with `move`-suggestion per
+  Rule 6.17) is the contract W12 must preserve.
+
+**Verification**:
+```
+go test ./compiler/liveness/... -v
+go test ./compiler/liveness/... -run TestSingleLiveness -v
+go test ./compiler/liveness/... -run TestDestructionOnAllPaths -v
+go test ./compiler/liveness/... -run TestReturnBorrowRule -v
+go test ./compiler/liveness/... -run TestMutrefAliasing -v
+go test ./compiler/liveness/... -run TestUseAfterMove -v
+go test ./compiler/liveness/... -run TestClosureEscape -v
+go test ./compiler/codegen/... -run TestDestructorCallEmitted -v
+go test ./tests/e2e/... -run TestDropObservable -v
+go test ./tests/e2e/... -run TestBorrowRejections -v
+go run tools/checkstubs/main.go -wave W09 -phase P00
+go run tools/checkstubs/main.go -wave W09
+go run tools/checkstubs/main.go -history-current-wave W09
+grep "WC009" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+,
+MinGW gcc 13.x). CI matrix green on the committed SHA is the
+authoritative record.
