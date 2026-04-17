@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Error propagation (`?` operator) | compiler/lower/ (W05 spine only; no `?` lowering) | `?` operator emits a lowerer diagnostic | "error propagation not yet implemented" | W11 |
 | Closures, capture, `move` prefix, Fn/FnMut/FnOnce | compiler/lower/ (W05 spine only; no closure lifting) | closure expressions emit a lowerer diagnostic | "closures not yet implemented" | W12 |
 | Trait objects (`dyn Trait`, vtables, object safety) | compiler/codegen/ (W05 C11 subset; no dynamic dispatch) | `dyn Trait` use emits a codegen diagnostic | "trait objects not yet implemented" | W13 |
 | Compile-time evaluation (`const fn`, `size_of`, `align_of`) | compiler/ (not yet created consteval/) | no const evaluation | "const fn not yet implemented" | W14 |
@@ -386,5 +385,33 @@ Retired:
   `TestOrRangePatterns`, and e2e `TestMatchEnumDispatch`
   (`match_enum_dispatch.fuse` compiles through the full pipeline
   and exits 42 via `pick(Dir.North) → 42`).
+
+Rescheduled: (none this wave)
+
+### W11 — Error Propagation
+
+Added: (none this wave)
+
+Retired:
+- Error propagation (`?` operator) (compiler/check/expr.go
+  inferTry, compiler/check/try_test.go, compiler/lower/lower.go
+  lowerTry + errorVariantIndex, compiler/lower/try_test.go) —
+  confirmed retired by `go test ./compiler/check/... -run
+  TestQuestionTypecheck -v`, `go test ./compiler/lower/... -run
+  TestQuestionBranch -v`, and `go test ./tests/e2e/... -run
+  TestErrorPropagation -v`. Proof surface: `TestQuestionTypecheck`
+  (4 sub-cases: result-shape-ok, no-err-variant-rejected,
+  non-enum-rejected, mismatched-enclosing-return-rejected),
+  `TestQuestionOptionTypecheck` (Option-shape via an Err-marker
+  enum because `None` is reserved at the lexer level at W11),
+  `TestQuestionBranch` (MIR asserts a TermIfEq against the Err
+  discriminant plus two TermReturn terminators: the early-return
+  arm and the success-path return from the enclosing fn), and
+  e2e `TestErrorPropagation` — `error_propagation_err.fuse`
+  compiles `run(false)` through the full pipeline and exits 43
+  (Err propagated via `?` and mapped by main's match), while
+  `error_propagation_ok.fuse` exercises `run(true)` and exits 0.
+  Both fixtures use `mustBuildAs` with neutral output stems
+  (`ep_err`, `ep_ok`) per the W10 audit-followup pattern.
 
 Rescheduled: (none this wave)

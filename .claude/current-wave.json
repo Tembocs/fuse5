@@ -1,6 +1,6 @@
 {
   "current_wave": "W11",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Error Propagation wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W11 -phase P00` exits 0: no overdue stubs, error-propagation row Active with retiring wave W11. Fifth wave under Rule 9.5 discipline. Next: implementation commit(s) for `?` typecheck on Result/Option (checker), `?` lowering as branch-and-early-return (MIR+lowerer+codegen), e2e proof programs for run(false)→43 and run(true)→0. W10's TermIfEq + TermJump + EnumName.Variant lowering are the foundations this wave builds on."
+  "notes": "Error Propagation wave in closure phase. Error-propagation stub retired: `?` typecheck on Result/Option-shaped enums (checker inferTry requires an `Err`/`None` variant and matching enclosing-fn return type), `?` lowering as branch-and-early-return (lowerer emits TermIfEq against Err discriminant + distinct early-return and success blocks), two e2e proofs (error_propagation_err.fuse exits 43 via Err propagation; error_propagation_ok.fuse exits 0 via Ok continuation). Reuses W10's control-flow primitives (TermIfEq + TermJump + UseBlock). STUBS.md W11 history block appended; WC011 logged using the Rule 10.2 mandated 5-field template. Fifth full wave under Rule 9.5 three-commit discipline: P00 audit (a33c55e), implementation (f9018af), PCL (this commit). Next: commit W11 PCL and enter W12 Closures."
 }

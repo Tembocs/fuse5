@@ -2380,3 +2380,106 @@ grep "WC010" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64, go1.22+,
 MinGW gcc 13.x). CI matrix green on the committed SHA is the
 authoritative record.
+
+### WC011 — Wave 11 Closure
+
+Date: 2026-04-17
+Wave: 11 — Error Propagation
+
+**Proof programs added this wave**:
+- `tests/e2e/error_propagation_err.fuse` — exercises the
+  error path. `enum Status { Ok, Err }`; `check(false)` →
+  `Status.Err`; `run(false)` returns `check(false)?` which
+  early-returns on Err; main's `match` maps Err → exit 43.
+  Driving test: `TestErrorPropagation/run-false-propagates-err`.
+- `tests/e2e/error_propagation_ok.fuse` — exercises the
+  success path. Same program shape; `run(true)` continues
+  past the `?` and returns Ok; main's `match` maps Ok →
+  exit 0. Driving test:
+  `TestErrorPropagation/run-true-continues-ok`.
+
+Both fixtures build to neutral binary stems (`ep_err`,
+`ep_ok`) via `mustBuildAs` so the Windows launch path stays
+predictable (audit report 2026-04-17 13:05, W10 finding G).
+Both are registered in `tests/e2e/README.md`.
+
+**Stubs retired this wave**:
+- "Error propagation (`?` operator)" — removed from
+  `STUBS.md` Active table at this PCL commit. Confirmed by
+  `go run tools/checkstubs/main.go -wave W11` and
+  `go run tools/checkstubs/main.go -history-current-wave W11`,
+  both exiting 0. Proof surface enumerated in the W11 block
+  of the `STUBS.md` Stub history.
+
+**Stubs introduced this wave**:
+None. W11 retires the one stub it owns. The closure wave
+(W12), trait objects (W13), and stdlib-hosted error types
+(W20+) keep their existing stubs and retirement waves.
+
+**What was harder than planned**:
+- Fuse's lexer reserves `None` as a keyword (for the
+  `LitNone` literal), so user-defined `None` variants aren't
+  spellable in source at W11. `TestQuestionOptionTypecheck`
+  therefore uses a Result-shaped enum with a custom
+  `Present` / `Err` variant pair to exercise the Option
+  path via the same `enumHasErrorVariant` predicate. The
+  predicate still recognises `None` for forward-compatibility
+  when the grammar opens up contextual keywords.
+- The W11 scope assumes enum variants are payload-free. The
+  `?` operator's result-type rule is consequently "the
+  receiver's enum type" rather than "the inner T of
+  Result[T, E]". Payload-carrying enums arrive when MIR
+  models tagged unions (W15 MIR consolidation) or when the
+  stdlib's generic Result lands (W20+). The W11 narrative
+  holds either way because the branch-and-early-return
+  lowering is the same at that layer.
+- The MIR block layout for `?` reuses W10's TermIfEq +
+  TermJump + UseBlock machinery. Getting it right required
+  recognising that the early-return block is a terminator-
+  only block (no successor) and that the success block
+  leaves `recv` available for the caller as the `?`
+  expression's value — no phi needed because MIR isn't
+  strict SSA.
+
+**What the next wave must know**:
+- `hir.TryExpr.TypeOf()` is the checker's authoritative
+  type for a `?` expression after W11. Downstream passes
+  should consult it rather than re-deriving from the
+  receiver.
+- `lowerTry` emits a control-flow pattern identical to
+  W10's match dispatch: TermIfEq on the discriminant,
+  distinct blocks for each arm, and the caller resumes in
+  the open success block. Anything that walks MIR
+  terminators must already handle TermIfEq + TermJump from
+  W10; W11 adds no new terminator shapes.
+- The checker recognises `Err` and `None` as the magic
+  error-variant names. Any new error-carrying enum must
+  declare one of those variants to participate in `?`
+  lowering. When the grammar admits contextual `None`, the
+  Option-shape tests can be restored to their literal
+  `Some`/`None` form.
+- Payloaded Result / Option is deferred. When W15 / W20
+  land payload extraction, `inferTry`'s result-type rule
+  changes from "receiver type" to "payload type of the Ok
+  / Some variant"; the lowerer's extraction path then
+  produces a new register for that payload rather than
+  reusing the receiver's register.
+- `?` at W11 requires the enclosing fn's return type to be
+  exactly the receiver's type. Future coercion shapes
+  (Into / From) relax this. Any pass that reasons about
+  return-type compatibility must not assume the W11 strict
+  rule persists indefinitely.
+
+**Verification**:
+```
+go test ./compiler/check/... -run TestQuestionTypecheck -v
+go test ./compiler/lower/... -run TestQuestionBranch -v
+go test ./tests/e2e/... -run TestErrorPropagation -v
+go run tools/checkstubs/main.go -wave W11 -phase P00
+go run tools/checkstubs/main.go -wave W11
+go run tools/checkstubs/main.go -history-current-wave W11
+grep "WC011" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+,
+MinGW gcc 13.x). CI matrix green on the committed SHA is the
+authoritative record.
