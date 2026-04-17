@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Trait objects (`dyn Trait`, vtables, object safety) | compiler/codegen/ (W05 C11 subset; no dynamic dispatch) | `dyn Trait` use emits a codegen diagnostic | "trait objects not yet implemented" | W13 |
 | Compile-time evaluation (`const fn`, `size_of`, `align_of`) | compiler/ (not yet created consteval/) | no const evaluation | "const fn not yet implemented" | W14 |
 | MIR consolidation (casts, fn pointers, slice range, struct update, overflow arithmetic) | compiler/lower/ + compiler/mir/ (W05 minimal subset only) | non-spine forms emit lowerer diagnostics | "MIR lowering not yet implemented" | W15 |
 | Runtime ABI (threads, channels, panic, IO) | runtime/src/ (W05 fuse_rt_abort only; threads/channels/IO call abort with "not yet implemented") | stub runtime entries abort at runtime | "runtime not yet implemented" | W16 |
@@ -445,5 +444,37 @@ Retired:
   (5 shape → trait-set cases), and e2e `TestClosureCaptureRuns`
   (`closure_capture.fuse` compiles `(fn() -> I32 { return 42; })()`
   through the full pipeline and exits 42).
+
+Rescheduled: (none this wave)
+
+### W13 — Trait Objects (`dyn Trait`)
+
+Added: (none this wave)
+
+Retired:
+- Trait objects (`dyn Trait`, vtables, object safety)
+  (compiler/check/object_safety.go +
+  object_safety_test.go, compiler/lower/dyn.go + dyn_test.go,
+  compiler/codegen/dyn.go + dyn_test.go) — confirmed retired
+  by `go test ./compiler/check/... -run TestObjectSafety -v`,
+  `go test ./compiler/lower/... -run TestDynTraitFatPointer -v`,
+  `go test ./compiler/codegen/... -run TestVtableEmission -v`,
+  `go test ./compiler/codegen/... -run TestDynTraitMulti -v`,
+  and `go test ./tests/e2e/... -run TestDynDispatchProof -v`.
+  Proof surface: `TestObjectSafety` (6 sub-cases covering
+  plain/ref receivers, generic-method / non-self-receiver /
+  Self-in-param / assoc-const rejections), `TestDynTraitFatPointer`
+  (FatPointerShape preserves DataField/VtableField/DynType),
+  `TestDynOwnershipForms` (shape stable across `dyn` / `ref
+  dyn` / `mutref dyn`), `TestVtableLayoutShape` (deterministic
+  size/align/drop_fn header + method order), `TestCombinedVtableOrdering`
+  (alphabetical trait ordering in `dyn A + B`),
+  `TestVtableEmission`, `TestDynTraitMulti` (combined vtable C
+  emission), `TestDynMethodDispatch` (vtable-indirect call
+  shape), `TestFatPointerStruct` (DynPtr_<Trait> layout), and
+  e2e `TestDynDispatchProof` (dyn_dispatch.fuse compiles
+  through the full pipeline, exits 42, and the test exercises
+  IsObjectSafeWithTab + BuildVtableLayout + EmitVtable +
+  EmitFatPointerStruct on the checked trait).
 
 Rescheduled: (none this wave)

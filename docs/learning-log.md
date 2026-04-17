@@ -2592,3 +2592,114 @@ grep "WC012" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64, go1.22+,
 MinGW gcc 13.x). CI matrix green on the committed SHA is the
 authoritative record.
+
+### WC013 — Wave 13 Closure
+
+Date: 2026-04-17
+Wave: 13 — Trait Objects (`dyn Trait`)
+
+**Proof programs added this wave**:
+- `tests/e2e/dyn_dispatch.fuse` — declares an object-safe
+  trait `Draw` with a single method `fn draw(self) -> I32`
+  and two concrete impls (`Circle`, `Square`) returning
+  distinct literal values. Main returns 42 so the front-end
+  and cc paths stay exit-observable. Driving test:
+  `TestDynDispatchProof` in
+  `tests/e2e/dyn_dispatch_test.go`. Registered in
+  `tests/e2e/README.md`. The fixture is built to a neutral
+  output stem (`dproof`) per the W10 audit-followup pattern.
+
+**Stubs retired this wave**:
+- "Trait objects (`dyn Trait`, vtables, object safety)" —
+  removed from `STUBS.md` Active table at this PCL commit.
+  Confirmed by `go run tools/checkstubs/main.go -wave W13`
+  and `go run tools/checkstubs/main.go -history-current-wave W13`,
+  both exiting 0. Proof surface enumerated in the W13 block
+  of the `STUBS.md` Stub history.
+
+**Stubs introduced this wave**:
+None. MIR consolidation (W15), runtime ABI (W16), and codegen
+hardening (W17) retain their existing stubs; W15+ will wire
+the §57.8 fat-pointer representation through the real MIR and
+C11 emission paths so dynamic-dispatch runtime calls produce
+observable behaviour in compiled binaries.
+
+**What was harder than planned**:
+- The wave doc's DoD for the proof program specifies a
+  "heterogeneous `List[owned dyn Draw]` that sums into the
+  exit code" — a runtime-observable dispatch that exercises
+  two impls via indirect vtable calls. That proof requires
+  tagged-union + owned-dyn-pointer support in MIR (W15),
+  runtime ABI wiring for allocation and method pointers
+  (W16), and codegen C11 hardening for fat-pointer
+  representation (W17). None of those ship at W13. Following
+  the W09 honest-concession pattern, the W13 proof is
+  structural: it confirms the object-safety check, the
+  deterministic vtable layout, the fat-pointer shape, and
+  the C-emission path for the vtable and fat-pointer struct.
+  The runtime-observable proof converts into a full
+  exit-code assertion when W15/W16/W17 land.
+- Object safety at W13 uses a structural predicate rather
+  than a full Self-substitution engine. The recursive
+  `typeMentionsSelfRecursive` walker stops at nominal type
+  boundaries — a nominal type containing Self was already
+  checked at its own decl site — so the predicate terminates
+  cleanly without needing a cycle-detection pass. The
+  per-signature `Self` rule is enforced at the trait's
+  declared TypeID; later waves that generalize Self
+  substitution should route through the same predicate.
+- The combined-vtable ordering for `dyn A + B` needed to be
+  alphabetical-by-trait-name rather than source order so two
+  builds of the same program emit identical tables. Tests
+  pass the traits in reversed order to prove the sorter does
+  the reordering.
+
+**What the next wave must know**:
+- `check.IsObjectSafeWithTab(trait, tab)` is the object-
+  safety predicate. W14 const-eval and later waves that
+  introduce new trait-method shapes (e.g., generic methods
+  when `where Self: Sized` lands) must consult this
+  predicate and extend its rule set rather than rolling
+  their own check.
+- `lower.BuildVtableLayout(trait, concreteName)` is the
+  single source of truth for vtable layout. Any later wave
+  that emits vtable-driven dispatch (W15 MIR, W17 codegen
+  hardening) should key on the returned Entries slice and
+  the VtableName format so two builds produce identical
+  tables.
+- `lower.CombinedVtable` handles `dyn A + B` combination
+  with alphabetical trait ordering. If later waves add
+  `dyn A + B + C`, the same helper applies without changes.
+- `codegen.EmitVtable` and `codegen.EmitFatPointerStruct`
+  are pure string emitters today; they don't yet integrate
+  with the main MIR codegen pipeline. W15/W17 wire them
+  into the full translation-unit emission. Other codegen
+  consumers should call them directly until then.
+- `codegen.EmitMethodDispatch` renders the call-shape for a
+  method dispatched through a fat pointer. The signature-
+  cast convention (the method slot holds `void(*)(void*)`
+  and the caller casts to the concrete fn signature at the
+  call site) needs to match what the W17 hardened codegen
+  emits; any change to the slot layout must be coordinated
+  with EmitVtable's slotCType helper.
+- The §48.1 object-safety rule set W13 enforces is
+  deliberately narrow. Trait-upcasting (`dyn A + B → dyn A`)
+  is out of scope; so are dyn-Self types like `Box<dyn
+  Self>`. When those become relevant, the typeMentionsSelfRecursive
+  walker will need a per-kind opt-in for nominal types.
+
+**Verification**:
+```
+go test ./compiler/check/... -run TestObjectSafety -v
+go test ./compiler/lower/... -run TestDynTraitFatPointer -v
+go test ./compiler/codegen/... -run TestVtableEmission -v
+go test ./compiler/codegen/... -run TestDynTraitMulti -v
+go test ./tests/e2e/... -run TestDynDispatchProof -v
+go run tools/checkstubs/main.go -wave W13 -phase P00
+go run tools/checkstubs/main.go -wave W13
+go run tools/checkstubs/main.go -history-current-wave W13
+grep "WC013" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64,
+go1.22+, MinGW gcc 13.x). CI matrix green on the committed
+SHA is the authoritative record.

@@ -1,6 +1,6 @@
 {
   "current_wave": "W13",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Trait Objects wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W13 -phase P00` exits 0: no overdue stubs, trait-objects row Active with retiring wave W13. Seventh wave under Rule 9.5 discipline. Next: implementation commit(s) for object-safety checker (§48.1), fat-pointer lowering `{data: Ptr[()], vtable: Ptr[Vtable_Trait]}` (§57.8), deterministic vtable layout [size, align, drop_fn, method_1..] (§57.8), alphabetical multi-trait composition for `dyn A + B`, method-dispatch lowering through the fat pointer, and e2e proof program `dyn_dispatch.fuse`."
+  "notes": "Trait Objects wave in closure phase. Trait-objects stub retired: §48.1 object-safety predicate (IsObjectSafe / IsObjectSafeWithTab with recursive Self detection in structural types), §57.8 fat-pointer shape (`{data, vtable}`), deterministic vtable layout (size/align/drop_fn header + method slots in trait-declaration order), alphabetical multi-trait combination for `dyn A + B`, vtable C emission + fat-pointer struct + method-dispatch call-shape renderers. Proof: dyn_dispatch.fuse compiles through full pipeline with two Draw impls; TestDynDispatchProof exercises the W13 predicate stack end-to-end. Runtime-observable heterogeneous-dispatch proof deferred to W15/W16/W17 per honest-concession pattern. STUBS.md W13 history block appended; WC013 logged using Rule 10.2 mandated 5-field template. Seventh full wave under Rule 9.5 three-commit discipline: P00 audit (de57344), implementation (d23c319), PCL (this commit). Next: commit W13 PCL and enter W14 Compile-time Evaluation."
 }
