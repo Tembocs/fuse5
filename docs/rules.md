@@ -418,6 +418,41 @@ Task-scoped work should name the wave or task ID in the branch name.
 
 ### Rule 9.4 — Force-pushing shared protected branches is forbidden.
 
+### Rule 9.5 — Wave phases land in distinct commits.
+
+Every wave's Phase 00 stub audit, implementation, and Phase PCL wave closure
+must land as separate git commits, even when the same contributor does all
+three in one session. The phase model (`docs/phase-model.md` §3) treats
+these as distinct temporal phases; the commit history must reflect that
+separation so that:
+
+- the P00 audit is independently verifiable at the closure-SHA predecessor,
+- implementation work is reviewable without being mixed with
+  governance updates, and
+- the PCL commit is a clean retirement record whose diff is only stub
+  removal, Stub-history append, `WCxxx` append, and
+  `.claude/current-wave.json` update.
+
+The minimum commit sequence per wave is:
+
+1. **P00 commit** — updates `.claude/current-wave.json` to `{wave: Wxx,
+   phase: P00}`, refreshes any stale `STUBS.md` Active-row descriptions,
+   and records the output of `go run tools/checkstubs/main.go -wave Wxx
+   -phase P00`. Touches no compiler source.
+2. **Implementation commit(s)** — one or more commits carrying the
+   compiler source, tests, and any proof programs. Multiple per-phase
+   commits are encouraged when the wave has independent sub-features.
+   No `STUBS.md` Active-row removal, no `WCxxx` entry, no
+   current-wave.json phase bump happens here.
+3. **PCL commit** — removes the retired row from the `STUBS.md` Active
+   table, appends the wave's Stub-history block, appends the `WCxxx`
+   entry to `docs/learning-log.md`, and bumps
+   `.claude/current-wave.json` to `{phase: PCL}`.
+
+Waves W00–W06 pre-date this rule and were landed as single combined
+commits; the retrospective record is in `L020`. Rule 9.5 applies to W07
+and every subsequent wave.
+
 ## 10. Learning log rules
 
 ### Rule 10.1 — The learning log is append-only.

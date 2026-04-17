@@ -908,6 +908,86 @@ The first now includes `TestCheckWaveSameWaveNotOverdue` which fails if
 `<=` is ever reintroduced. The second now exits 0 when the lexer stub is
 still present but retires W01.
 
+### L017 — Wave phases W00–W06 landed in combined single commits
+
+Date: 2026-04-17
+Discovered during: Retrospective audit of W00–W06 after W06 closure
+
+**Reproducer**:
+`git log --oneline` between `735e1d3` and `35a4204`. Each wave's
+implementation SHA (`d609313` W00, `962d41c` W01, `ca88b11` W02,
+`f132793` W03, `7624fab` W04, `9eac416` W05, `35a4204` W06) is
+simultaneously the P00 audit, implementation, and PCL commit — a
+single commit touches `STUBS.md`, `.claude/current-wave.json`,
+`docs/learning-log.md`, and compiler source in the same diff.
+
+**What was tried first**:
+No alternative was tried; the phase model in
+`docs/phase-model.md` §3 describes P00 / implementation / PCL as
+distinct *phases* but never stated they had to be distinct
+*commits*. The rule set in `docs/rules.md` §9 similarly said nothing
+about commit-phase mapping. Each wave's contributor batched the
+three phases into one commit for convenience.
+
+**Root cause**:
+The temporal discipline the phase model expects (audit before
+implementation; retirement only after verified implementation) was
+enforced at the in-session level but not at the commit level.
+Without commit separation, a retrospective auditor cannot verify
+the P00 state of STUBS.md independently of the implementation; they
+also cannot verify that the PCL retirement happened only after the
+implementation commit was CI-green.
+
+**Spec gap**:
+None in the language reference; this is a governance defect.
+
+**Plan gap**:
+`docs/rules.md` §9 (Commit and PR rules) lacked a rule tying the
+phase model's temporal phases to the commit graph. `docs/phase-model.md`
+described the phases but did not mandate commit separation. The wave
+docs under `docs/implementation/waveNN_*.md` listed Verify commands
+per phase but never said "land each phase as its own commit."
+
+**Fix**:
+- `docs/rules.md` §9: add `Rule 9.5 — Wave phases land in distinct
+  commits.` The rule defines the minimum three-commit sequence
+  (P00 → implementation → PCL) and enumerates what must and must
+  not appear in each commit. Applies to W07 and every subsequent
+  wave. The rule explicitly records that W00–W06 pre-date it.
+- This log entry documents the retrospective record.
+
+**Cascading effects**:
+- Retroactively splitting W00–W06 commits would rewrite `main`
+  history and invalidate the closure SHAs cited in every prior
+  `WCxxx` entry. That is a cure worse than the disease; Rule 9.5
+  therefore applies going forward only.
+- Future wave audits can rely on Rule 9.5 to verify that each
+  phase's state is independently reachable via `git checkout
+  <sha>`. The phase-00 audit SHA, for example, must reproduce the
+  pre-implementation STUBS.md that W24's Stub Clearance Gate will
+  eventually key against.
+- The closure-template defect in `WC003`–`WC006` (separate L-entry
+  covers that) is easier to fix in isolation once the 3-commit
+  pattern is in place because the PCL commit's diff becomes a
+  targeted retirement change, not a mixed diff.
+
+**Architectural lesson**:
+Phase discipline that lives only in agent instinct rather than in
+the commit graph is unverifiable after the fact. Any discipline the
+project expects a future auditor to confirm — ordering, pre/post
+state, attribution — must map into commit topology. "In-session
+workflow" is not a durable record.
+
+**Verification**:
+```
+grep -n "Rule 9.5" docs/rules.md
+grep -n "L017" docs/learning-log.md
+git log --oneline d609313..35a4204
+```
+The first two confirm the rule and record exist; the third documents
+the single-commit-per-wave pattern the rule is replacing.
+
+
 ### WC000 — Wave 00 Closure
 
 Date: 2026-04-16
