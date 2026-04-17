@@ -1,6 +1,6 @@
 {
-  "current_wave": "W06",
-  "current_phase": "PCL",
+  "current_wave": "W07",
+  "current_phase": "P00",
   "updated": "2026-04-17",
-  "notes": "Type Checking wave in closure phase. Type checker stub retired: two-pass checker, nominal identity per §2.8, numeric widening lattice, `as` cast semantics, trait resolution with coherence+orphan rules, bound-chain lookup, associated-type coverage, contextual inference (literal types default or hint-driven), fn pointer types, impl Trait param/return, union field validation, newtype distinctness, @repr/@align validation, variadic extern checks. No KindInfer survives checking (L013). Driver now runs Check between HIR bridge and MIR lowering. MIR/lowerer/codegen extended with OpParam/OpCall for multi-fn programs. Proof program `checker_basic.fuse` compiles via full pipeline and exits 42. STUBS.md W06 history block appended; WC006 logged. All wave-spec Verify commands pass; full `go test ./...` green. Next: commit W06 closure and enter W07 Concurrency Semantics."
+  "notes": "Concurrency Semantics wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W07 -phase P00` exits 0: no overdue stubs, Concurrency checker row remains Active with retiring wave W07, ThreadHandle and Channel type kinds (pre-seeded at W04) available via typetable. STUBS.md Active-row descriptions were refreshed at 14a15d4 (W05→W06 cleanup); no further refresh required here. Next: implementation commit(s) for marker traits (Send/Sync/Copy), Chan[T] typecheck, spawn->ThreadHandle[T] typing with Send-on-capture bound, @rank lock ordering, and the TestConcurrencyRejections e2e proof."
 }
