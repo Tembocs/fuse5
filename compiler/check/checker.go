@@ -30,6 +30,7 @@ func Check(prog *hir.Program) []Diagnostic {
 	c.checkItemShapes()
 	c.checkAssociatedTypesCoverage()
 	c.checkBodies()
+	c.checkConcurrency()
 	return c.diags
 }
 
@@ -55,6 +56,9 @@ type checker struct {
 	traits    map[string]*traitInfo           // trait NodeID → trait body metadata
 	impls     []*implBlock                    // all impl blocks in registration order
 	implByPair map[coherenceKey]*implBlock    // (trait-TypeId, target-TypeId) → impl; NoType trait = inherent
+
+	// W07 concurrency state (lazy).
+	concur *concurrencyContext
 
 	stats Stats
 }
