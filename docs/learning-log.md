@@ -2274,3 +2274,109 @@ grep "WC009" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64, go1.22+,
 MinGW gcc 13.x). CI matrix green on the committed SHA is the
 authoritative record.
+
+### WC010 — Wave 10 Closure
+
+Date: 2026-04-17
+Wave: 10 — Pattern Matching
+
+**Proof programs added this wave**:
+- `tests/e2e/match_enum_dispatch.fuse` — `enum Dir { North,
+  South }` with a `pick(d: Dir) -> I32` that `match`es and
+  returns 42 for North, 7 for South. Main invokes
+  `pick(Dir.North)`, so the binary must exit 42. Driving test:
+  `TestMatchEnumDispatch` in `tests/e2e/match_test.go`. This is
+  the first W10-specific end-to-end proof; it exercises
+  scrutinee-load, discriminant-compare, branch-to-arm, result-
+  register merge, and return in a single binary.
+
+**Stubs retired this wave**:
+- "Pattern matching dispatch and exhaustiveness" — removed from
+  `STUBS.md` Active table at this PCL commit. Confirmed by
+  `go run tools/checkstubs/main.go -wave W10` and
+  `go run tools/checkstubs/main.go -history-current-wave W10`,
+  both exiting 0. Proof surface enumerated in the W10 block of
+  the `STUBS.md` Stub history.
+
+**Stubs introduced this wave**:
+None. W10 retires the one stub it owns. Pattern forms the
+lowerer doesn't cover (range-pattern, non-total or-pattern,
+inner `@`-binding) are deferred within existing stubs:
+const-evaluation (W14) gates range-pattern lowering, and the
+closure wave (W12) handles the broader pattern-binding story.
+No new `STUBS.md` rows needed.
+
+**What was harder than planned**:
+- Match arms can produce values from multiple branches; MIR's
+  non-strict-SSA shape meant I needed a "result register" that
+  every arm writes before jumping to a merge block. Codegen's
+  declaration-hoisting loop originally emitted one `int64_t rN;`
+  per destination per instruction, so a register written from
+  multiple arms caused a C redeclaration error. Fix: dedupe
+  destination registers before emitting declarations. The
+  W05-vintage pattern of "one ConstInt per Reg" no longer
+  holds after W10.
+- The W05 lowerer only handled integer literals. Match-on-bool
+  arms construct `true`/`false` literals at call sites like
+  `pick(true)`, so the lowerer now emits bool literals as i64
+  constants (`true` → 1, `false` → 0). The convention matches
+  the discriminant shape the match dispatcher compares against.
+- `Dir.North` as a value expression is a two-segment PathExpr
+  that the W05 spine previously rejected ("module-qualified
+  path values not yet lowered"). W10 added a targeted lowering:
+  when the first segment names a known enum, the two-segment
+  path becomes a ConstInt carrying the variant's declared index.
+  The check intentionally stops at two segments; anything
+  deeper (nested modules, generic args) defers to later waves.
+- `ConstructorPat` on a non-enum scrutinee used to fail because
+  the lowerer read `match.Scrutinee.TypeOf()` — a value whose
+  kind might be affected by upstream substitution. W10 prefers
+  `ConstructorPat.ConstructorType` (set by the
+  resolver/bridge), falling back to the scrutinee's type only
+  when the pattern's own type isn't set. This makes the
+  match-lowering robust against monomorphized / remapped
+  scrutinee types.
+
+**What the next wave must know**:
+- MIR now has three terminators: TermReturn (W05), TermJump
+  (W10), TermIfEq (W10). Any pass that iterates terminators
+  must handle all three — `mir.Terminator.String()` covers the
+  spelling.
+- `Builder.Jump`, `Builder.IfEq`, and `Builder.UseBlock` are
+  the control-flow primitives. `UseBlock` re-enters a previously
+  allocated block so arm-body / merge-block emission can
+  interleave.
+- Codegen emits `L<BlockID>:` labels whenever a function has
+  more than one block. Future passes that care about block IDs
+  (liveness, incremental) should key on `mir.Block.ID`, not on
+  allocation order.
+- `hir.MatchExpr` is now fully typed by the checker: arms'
+  body types are compared for consistency, patterns bind names
+  into the enclosing scope, and exhaustiveness + unreachable-
+  arm checks run via `CheckMatchExhaustiveness`. W11 error-
+  propagation can rely on the checker having emitted a concrete
+  type for every MatchExpr.
+- Bool-literal lowering (true=1, false=0) and enum-variant
+  index lowering (variant at position k → ConstInt k) form
+  the discriminant convention. W11 / W12 / W13 passes that
+  emit match-like dispatch should use the same indices.
+- `match_enum_dispatch.fuse` is the W10 e2e anchor; it's a
+  good smoke test for the full pipeline end-to-end because it
+  touches every stage (parse / resolve / bridge / check /
+  monomorph / liveness / lower / codegen / cc / exec).
+
+**Verification**:
+```
+go test ./compiler/check/... -run TestExhaustivenessChecking -v
+go test ./compiler/lower/... -run TestMatchDispatch -v
+go test ./compiler/lower/... -run TestEnumDiscriminantAccess -v
+go test ./compiler/lower/... -run TestOrRangePatterns -v
+go test ./tests/e2e/... -run TestMatchEnumDispatch -v
+go run tools/checkstubs/main.go -wave W10 -phase P00
+go run tools/checkstubs/main.go -wave W10
+go run tools/checkstubs/main.go -history-current-wave W10
+grep "WC010" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+,
+MinGW gcc 13.x). CI matrix green on the committed SHA is the
+authoritative record.

@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Pattern matching dispatch and exhaustiveness | compiler/check/ (W06 type checker only; no match dispatch/exhaustiveness) | match arms type-check but exhaustiveness is not enforced | "pattern matching not yet implemented" | W10 |
 | Error propagation (`?` operator) | compiler/lower/ (W05 spine only; no `?` lowering) | `?` operator emits a lowerer diagnostic | "error propagation not yet implemented" | W11 |
 | Closures, capture, `move` prefix, Fn/FnMut/FnOnce | compiler/lower/ (W05 spine only; no closure lifting) | closure expressions emit a lowerer diagnostic | "closures not yet implemented" | W12 |
 | Trait objects (`dyn Trait`, vtables, object safety) | compiler/codegen/ (W05 C11 subset; no dynamic dispatch) | `dyn Trait` use emits a codegen diagnostic | "trait objects not yet implemented" | W13 |
@@ -361,5 +360,31 @@ Retired:
   reject_aliased_mutref, reject_use_after_move,
   reject_escaping_borrow_closure) + `TestDropObservable`
   asserting non-empty DropIntent metadata.
+
+Rescheduled: (none this wave)
+
+### W10 — Pattern Matching
+
+Added: (none this wave)
+
+Retired:
+- Pattern matching dispatch and exhaustiveness
+  (compiler/check/match.go, compiler/check/match_test.go,
+  compiler/lower/lower.go match-lowering extension,
+  compiler/lower/match_test.go, plus MIR TermJump / TermIfEq in
+  compiler/mir/mir.go, codegen label emission in
+  compiler/codegen/c11.go) — confirmed retired by
+  `go test ./compiler/check/... -run TestExhaustivenessChecking -v`,
+  `go test ./compiler/lower/... -run TestMatchDispatch -v`,
+  `go test ./compiler/lower/... -run TestEnumDiscriminantAccess -v`,
+  `go test ./compiler/lower/... -run TestOrRangePatterns -v`, and
+  `go test ./tests/e2e/... -run TestMatchEnumDispatch -v`. Proof
+  surface: `TestExhaustivenessChecking` (5 sub-cases),
+  `TestUnreachableArmDetection` (2 sub-cases), `TestMatchDispatch`,
+  `TestEnumDiscriminantAccess`, `TestPayloadExtraction`,
+  `TestOrPattern`, `TestRangePattern`, `TestAtBinding`,
+  `TestOrRangePatterns`, and e2e `TestMatchEnumDispatch`
+  (`match_enum_dispatch.fuse` compiles through the full pipeline
+  and exits 42 via `pick(Dir.North) → 42`).
 
 Rescheduled: (none this wave)

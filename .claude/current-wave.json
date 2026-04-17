@@ -1,6 +1,6 @@
 {
   "current_wave": "W10",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Pattern Matching wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W10 -phase P00` exits 0: no overdue stubs, pattern-matching row Active with retiring wave W10. Fourth wave under Rule 9.5 discipline. Next: implementation commit(s) for exhaustiveness checking over enums and bools (checker), unreachable arm detection, match lowering with cascading discriminant branches (MIR + lowerer + codegen), or/range/@-binding pattern forms, and e2e proof program `match_enum_dispatch.fuse`."
+  "notes": "Pattern Matching wave in closure phase. Pattern-matching stub retired: exhaustiveness (Bool + enum) + unreachable-arm detection (checker), MIR TermJump + TermIfEq terminators + Builder.Jump/IfEq/UseBlock, codegen label emission + register dedupe, lowerer match dispatch with cascading discriminant compares + shared result register + merge block, bool-literal and two-segment enum-path lowering. W10 also handles or/range/@ patterns (accepted total or-patterns, deferred range patterns via W14 const-eval, supported `name @ _` bindings). Proof: TestMatchEnumDispatch compiles match_enum_dispatch.fuse end-to-end and exits 42. STUBS.md W10 history block appended; WC010 logged using the Rule 10.2 mandated 5-field template. Fourth full wave under Rule 9.5 three-commit discipline: P00 audit (da1bca7), implementation (3080a73), PCL (this commit). Next: commit W10 PCL and enter W11 Error Propagation."
 }
