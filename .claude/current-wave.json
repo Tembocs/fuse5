@@ -1,6 +1,6 @@
 {
   "current_wave": "W12",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-17",
-  "notes": "Closures and Callable Traits wave, Phase 00 stub audit committed per Rule 9.5. `go run tools/checkstubs/main.go -wave W12 -phase P00` exits 0: no overdue stubs, closures row Active with retiring wave W12. Sixth wave under Rule 9.5 discipline. Next: implementation commit(s) for capture analysis (reads→ref/Copy, writes→mutref, move→owned per §15.7), `move` prefix reclassification (§15.3), escape classification (§15.5 — W09-P01-T06's consumer), environment-struct shape + closure lifting, Fn/FnMut/FnOnce intrinsic traits with auto-impl, call desugaring `f(args)→f.call(args)`, and e2e proof program `closure_capture.fuse`."
+  "notes": "Closures and Callable Traits wave in closure phase. Closures stub retired: capture analysis with Copy/Ref/Mutref/Owned classification (lower.AnalyzeClosure), `move` prefix reclassification (§15.3), escape classification (§15.5 — the W09-P01-T06 metadata source), env-struct shape + lifted-fn naming, Fn/FnMut/FnOnce intrinsic traits + auto-impl classifier (check.CallableTraitFor / TightestCallableTrait), call desugaring (DesugarCall trait → method-name map). Lowerer now inlines immediately-invoked closures as the W12 proof-path stand-in for full env-struct emission (W15 delivers that). Proof: closure_capture.fuse compiles `(fn() -> I32 { return 42; })()` through the full pipeline and exits 42. STUBS.md W12 history block appended; WC012 logged using the Rule 10.2 mandated 5-field template. Sixth full wave under Rule 9.5 three-commit discipline: P00 audit (c89c2b7), implementation (de981e9), PCL (this commit). Next: commit W12 PCL and enter W13 Trait Objects."
 }

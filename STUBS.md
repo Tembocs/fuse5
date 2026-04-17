@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Closures, capture, `move` prefix, Fn/FnMut/FnOnce | compiler/lower/ (W05 spine only; no closure lifting) | closure expressions emit a lowerer diagnostic | "closures not yet implemented" | W12 |
 | Trait objects (`dyn Trait`, vtables, object safety) | compiler/codegen/ (W05 C11 subset; no dynamic dispatch) | `dyn Trait` use emits a codegen diagnostic | "trait objects not yet implemented" | W13 |
 | Compile-time evaluation (`const fn`, `size_of`, `align_of`) | compiler/ (not yet created consteval/) | no const evaluation | "const fn not yet implemented" | W14 |
 | MIR consolidation (casts, fn pointers, slice range, struct update, overflow arithmetic) | compiler/lower/ + compiler/mir/ (W05 minimal subset only) | non-spine forms emit lowerer diagnostics | "MIR lowering not yet implemented" | W15 |
@@ -413,5 +412,38 @@ Retired:
   `error_propagation_ok.fuse` exercises `run(true)` and exits 0.
   Both fixtures use `mustBuildAs` with neutral output stems
   (`ep_err`, `ep_ok`) per the W10 audit-followup pattern.
+
+Rescheduled: (none this wave)
+
+### W12 — Closures and Callable Traits
+
+Added: (none this wave)
+
+Retired:
+- Closures, capture, `move` prefix, Fn/FnMut/FnOnce
+  (compiler/lower/closure.go + closure_test.go,
+  compiler/check/callable.go + callable_test.go, plus the
+  inlined immediately-invoked-closure path in
+  compiler/lower/lower.go) — confirmed retired by
+  `go test ./compiler/lower/... -run TestCaptureAnalysis -v`,
+  `go test ./compiler/lower/... -run TestMoveClosurePrefix -v`,
+  `go test ./compiler/lower/... -run TestEscapeClassification -v`,
+  `go test ./compiler/lower/... -run TestClosureLifting -v`,
+  `go test ./compiler/lower/... -run TestClosureConstruction -v`,
+  `go test ./compiler/check/... -run TestCallableAutoImpl -v`,
+  and `go test ./tests/e2e/... -run TestClosureCaptureRuns -v`.
+  Proof surface: `TestCaptureAnalysis` (4 sub-cases: Copy
+  outer read, non-Copy outer read, outer write, closure-param
+  shadows outer), `TestMoveClosurePrefix` (move prefix
+  reclassifies every capture as Owned), `TestEscapeClassification`
+  (4 sub-cases: owned→escape, ref→non-escape, mutref→non-escape,
+  copy-only→escape), `TestClosureLifting` (env fields sorted +
+  lifted fn name derived), `TestClosureConstruction` (two
+  passes produce identical analyses — determinism),
+  `TestCallDesugar` (Fn→call, FnMut→call_mut, FnOnce→call_once),
+  `TestCallableTraitDeclaration`, `TestCallableAutoImpl`
+  (5 shape → trait-set cases), and e2e `TestClosureCaptureRuns`
+  (`closure_capture.fuse` compiles `(fn() -> I32 { return 42; })()`
+  through the full pipeline and exits 42).
 
 Rescheduled: (none this wave)

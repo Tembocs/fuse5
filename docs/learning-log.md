@@ -2483,3 +2483,112 @@ grep "WC011" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64, go1.22+,
 MinGW gcc 13.x). CI matrix green on the committed SHA is the
 authoritative record.
+
+### WC012 — Wave 12 Closure
+
+Date: 2026-04-17
+Wave: 12 — Closures and Callable Traits
+
+**Proof programs added this wave**:
+- `tests/e2e/closure_capture.fuse` — demonstrates an
+  immediately-invoked no-capture closure. `main` computes and
+  returns `(fn() -> I32 { return 42; })()`; the lowerer inlines
+  the closure body, the call typechecks through the existing
+  path, and the produced binary exits 42. Driving test:
+  `TestClosureCaptureRuns` in
+  `tests/e2e/closure_capture_test.go`. Builds to a neutral
+  output stem (`cproof`) per the W10 audit-followup pattern.
+  Registered in `tests/e2e/README.md`.
+
+**Stubs retired this wave**:
+- "Closures, capture, `move` prefix, Fn/FnMut/FnOnce" — removed
+  from `STUBS.md` Active table at this PCL commit. Confirmed
+  by `go run tools/checkstubs/main.go -wave W12` and
+  `go run tools/checkstubs/main.go -history-current-wave W12`,
+  both exiting 0. Proof surface enumerated in the W12 block of
+  the `STUBS.md` Stub history.
+
+**Stubs introduced this wave**:
+None. Trait-object vtables (W13), const eval (W14), MIR
+consolidation for tagged unions + env structs + lifted fns
+(W15), runtime ABI (W16), and codegen C11 hardening (W17)
+remain on their previous schedule. W12 does not introduce new
+Active rows because the metadata surface it produces is
+consumed by existing later-wave stubs.
+
+**What was harder than planned**:
+- The W05-vintage spine still requires single-expression
+  closure bodies, which rules out the classical
+  `let f = ... ; return f(...);` shape for a proof. The W12
+  source-level proof therefore uses the immediately-invoked
+  form `(fn() -> T { return ...; })()`. The lowerer's
+  new `ClosureExpr`-as-callee case inlines the body — a
+  pragmatic stand-in for proper env-struct + lifted-fn
+  emission that W15 MIR consolidation will deliver. This
+  matches the W09 pattern of landing the checker-side
+  contract before the runtime-side mechanics are ready.
+- Capture analysis is structural across the whole HIR
+  expression set. The walker has to track "write context"
+  for the LHS of AssignExpr and the inner of ReferenceExpr
+  when Mutable is true; both change the classified mode
+  (CaptureMutref) rather than just appending to the read
+  set. Getting the recursion right for nested closures
+  required `mergeLocals` so an inner closure's parameters
+  shadow the outer's capture candidates correctly.
+- The Fuse grammar doesn't yet spell the `move` prefix in
+  source; the HIR `ClosureExpr.IsMove` flag is a bridge-
+  level marker that later parser work will wire. W12's
+  `classifyCaptures` already honours it so when the parser
+  gains the form, classification comes along for free.
+
+**What the next wave must know**:
+- `lower.AnalyzeClosure(c, anchor, outer, tab)` is the single
+  entry for every W12 metadata track. Callers pass the
+  enclosing scope's `name → TypeId` map and receive a
+  `ClosureAnalysis` with Captures, Escape, Traits, Env, and
+  Lifted filled in. W13 (trait objects) will consult
+  `ClosureAnalysis.Traits` when auto-impl-ing dyn `Fn` /
+  `FnMut` / `FnOnce` trait objects.
+- W15 MIR consolidation will take the `EnvShape` and
+  `LiftedShape` records and emit the real env-struct +
+  standalone fn. The wire protocol: env struct name =
+  `<anchorName>_closure_env`, lifted fn name =
+  `LiftedShape.FnName`, parameter list = env-by-value
+  followed by `LiftedShape.ParamNames`. Any codegen that
+  wants closures to be first-class values must key on these
+  names.
+- `DesugarCall(trait)` maps a callable trait to its method
+  name; codegen emitting the trait-object dispatch path
+  should call it rather than hard-coding strings.
+- `check.CallableShape` is the checker-side classifier;
+  code paths that attribute auto-impls should use
+  `CallableTraitFor(shape)` and `TightestCallableTrait(shape)`
+  rather than re-deriving from capture lists.
+- The W12 escape classifier is the definitive version of
+  the §15.5 rule. W09's proxy classifier in
+  `compiler/liveness/liveness.go` stays intact for
+  backward-compat, but future liveness extensions should
+  consult `lower.ClosureAnalysis.Escape` and phase the
+  classifier out.
+- Closure bodies at W12 are still required to be
+  single-expression. When W15 relaxes that, the inlining
+  path in `compiler/lower/lower.go` must grow into a real
+  lifted-fn-call emission.
+
+**Verification**:
+```
+go test ./compiler/lower/... -run TestCaptureAnalysis -v
+go test ./compiler/lower/... -run TestMoveClosurePrefix -v
+go test ./compiler/lower/... -run TestEscapeClassification -v
+go test ./compiler/lower/... -run TestClosureLifting -v
+go test ./compiler/lower/... -run TestClosureConstruction -v
+go test ./compiler/check/... -run TestCallableAutoImpl -v
+go test ./tests/e2e/... -run TestClosureCaptureRuns -v
+go run tools/checkstubs/main.go -wave W12 -phase P00
+go run tools/checkstubs/main.go -wave W12
+go run tools/checkstubs/main.go -history-current-wave W12
+grep "WC012" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64, go1.22+,
+MinGW gcc 13.x). CI matrix green on the committed SHA is the
+authoritative record.
