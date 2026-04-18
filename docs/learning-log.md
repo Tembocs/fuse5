@@ -4432,3 +4432,143 @@ go test ./...                                                # all green (Linux/
 Eighteenth full wave under Rule 9.5 three-commit discipline
 (P00 audit → P01/02/03 retirements → PCL closure). W25
 Stage 2 and Self-Hosting is next.
+
+### L021 — Features must be completed to their full declared scope in the Wave/phase that claims them done
+
+Date: 2026-04-18
+
+Type: architectural rule (forcing function against cross-wave
+deferral drift).
+
+**Rule.** A feature declared retired in wave `Wxx`/phase `Pyy`
+must be implemented to the full scope declared by its language-
+reference section AND its wave-doc exit criteria at that wave/
+phase boundary. Partial implementations, interface-shape
+placeholders, `return 0;` bodies, and "the next wave will
+finish this" deferrals are forbidden. If the full scope cannot
+land in the claimed wave/phase, the wave/phase is not complete;
+do not close it. Revise the plan or extend the wave before
+declaring the feature retired — never the other way around.
+
+**Finding.** Waves W20 (Stdlib Core), W21 (Custom Allocators),
+W22 (Stdlib Hosted), and W23 (Package Management) each closed
+while deferring the substance of their own exit criteria to a
+"next wave" that either did not schedule the work
+([L018](#l018--deferral-references-across-wc021--wc022--wc023-drift-to-unplanned-waves))
+or did not exist
+([L019](#l019--format-string-macros-are-not-scheduled)). The
+2026-04-18 retrospective audit
+(docs/audit/report-20260418-131730.md) found that each
+individual WCxxx entry looked honest because it named the
+deferral in prose, but the aggregate reproduced the exact
+[L013](#l013--self-verifying-plans-are-not-verification) silent-
+stub landscape that prior Fuse attempts collapsed under. W24's
+question to the W25 plan — "are the five residuals actually
+scheduled in the W25 / W26 wave docs?" — came back with `No`
+for every one of them: STUBS.md retiring-wave columns were
+wishful pointers, not commitments the target wave backed.
+
+**Root cause.** Wave completion had three separate integrity
+checks — Rule 6.10 (behavioural exit criteria), Rule 6.13
+(STUBS.md reflects retirements), Rule 6.16 (history log
+append) — but no single rule forbade the "retire the row,
+defer the substance" pattern. An implementer could:
+
+1. Write bodies as `return 0;` placeholders that parse and
+   trivially type-check (Rule 6.10 structurally satisfied).
+2. Strike the STUBS.md row for the feature (Rule 6.13
+   structurally satisfied).
+3. Log a WCxxx entry acknowledging the bodies are placeholders
+   and "real bodies land in Wyy" (Rule 6.16 structurally
+   satisfied).
+
+Every individual rule passed; the feature was provably not
+delivered; the next wave inherited a structurally-green-
+but-semantically-empty retirement and repeated the pattern.
+
+**Rule 6.18 (new, retroactively binding).** A wave/phase may
+not declare a feature retired unless:
+
+1. The feature's language-reference section is tagged `DONE — Wxx`
+   and the section's described behaviour is fully implemented
+   (not a placeholder, not interface-shape, not trivially-
+   typing).
+2. At least one end-to-end `tests/e2e/` proof program
+   exercises the feature adversarially — a program whose
+   exit code or observable output depends on the feature
+   working correctly (Rule 6.8), such that reverting the
+   feature to a stub flips the test from pass to fail.
+3. The STUBS.md row is struck AND the Stub history Retired
+   block names the proof program or regression test that
+   confirmed retirement (Rule 6.16), with the proof
+   referenced by committed path, not by prose.
+4. The WCxxx closure entry's "Proof programs added this
+   wave" list names the proof from (2) or cites an earlier
+   wave's proof that now additionally covers this feature.
+5. No WCxxx closure entry may contain the phrases
+   "placeholder", "interface-shape", "bodies land in",
+   "turbofish pending", "real implementation arrives with",
+   or structurally-equivalent prose, as a justification for
+   retiring a feature. Such phrases are permitted only in
+   the "What was harder than planned" section naming
+   genuine deferrals whose retirement-wave is actually
+   scheduled in that wave's plan.
+
+**Enforcement.** This rule is auditable from the WCxxx entry
+alone. A reviewer must, for every stub listed as Retired in
+the wave's Stub history block, open the named proof program,
+read its body, and confirm clause (2). Retirements not backed
+by an adversarial proof are audit-rework findings regardless
+of unit-test greenness
+([Checklist B](../audit.md#checklist-b--behavioral-proof-the-l013-trap)
+B1–B5 in docs/audit.md already encode the spirit).
+
+**Scope.** This rule applies retroactively. W20 / W21 / W22 /
+W23 retirements that failed clause (2) at their closure
+(stdlib body completion, custom-allocator behavioural state
+machine, hosted stdlib runtime dispatch, two-crate
+cross-dep call) are not retroactively reopened, but the
+Active STUBS.md rows that the 2026-04-18 audit repopulated
+for each of these gaps are authoritative until their
+genuine retirement. Any future wave that attempts to retire
+one of those rows without an adversarial proof program fails
+this rule.
+
+**Why this is the fifth-attempt rule.** The prior four Fuse
+attempts each reached their self-hosting gate with features
+silently stubbed
+([L013](#l013--self-verifying-plans-are-not-verification)).
+This attempt's unique forcing function is the wave-boundary
+discipline (P00 audit + PCL closure). Cross-wave deferral drift
+is the same failure mode wearing compliance. Rule 6.18 closes
+the last hole by requiring the *substance* to land at the same
+boundary that claims it.
+
+**How to apply.**
+
+- Implementers: before writing a WCxxx entry, read the wave's
+  exit criteria and enumerate every feature the wave declared
+  retired. For each, locate the adversarial proof program. If
+  none exists, do not write the closure — extend the wave or
+  amend the plan.
+- Auditors: reject any WCxxx whose "Stubs retired" list names
+  a feature not backed by an adversarial proof (Rule 6.8 /
+  Rule 6.18). The retirement is not a retirement; it is a
+  deferral masquerading as progress.
+- Plan revisers: STUBS.md retiring-wave columns are commitments
+  the target wave must schedule. If Wyy's plan does not name
+  the work, Wyy does not retire the row; either Wyy is
+  amended or the row's retirement is rescheduled to a wave
+  whose plan actually delivers it
+  ([L018](#l018--deferral-references-across-wc021--wc022--wc023-drift-to-unplanned-waves)
+  established this companion discipline).
+
+**Immediate consequence for W25.** The W25 plan currently
+schedules "port stage2 frontend" and "port stage2 driver" but
+does not name stdlib body completion, cross-crate `use`
+resolution, capturing-closure spawn lifting, or
+ThreadHandle.join Result wrapping as phases. The four W25-
+assigned STUBS.md rows cannot honestly retire at W25 under
+Rule 6.18 unless the W25 plan is first amended to add explicit
+phases for each, with named Verify commands. That amendment is
+the prerequisite to W25 entry, not a discretionary addition.
