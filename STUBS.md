@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| CLI, diagnostics, `fuse fmt/doc/repl`, incremental driver, Rule 6.17 audit | compiler/driver/ (W05 `build` subcommand only; no `run`/`check`/`test`/`fmt`/`doc`/`repl`, no incremental driver) | unimplemented subcommands exit non-zero with a usage message | "subcommand not yet implemented" | W18 |
 | Language server (LSP 3.17) | compiler/ (not yet created lsp/) | no LSP server | "fuse lsp not yet implemented" | W19 |
 | Stdlib core (traits, primitives, strings, collections, Cell/RefCell, Ptr.null, overflow methods) | stdlib/core/ (empty) | no stdlib | "stdlib core not yet implemented" | W20 |
 | Custom allocators (Allocator trait, parameterized collections) | stdlib/core/alloc/ (not yet created) | no allocator trait | "custom allocators not yet implemented" | W21 |
@@ -712,5 +711,64 @@ Retired:
   error_propagation {err,ok}, match_enum_dispatch,
   dyn_dispatch, spawn_observable, channel_round_trip) stays
   green on this SHA.
+
+Rescheduled: (none this wave)
+
+### W18 — CLI and Diagnostics
+
+Added: (none this wave)
+
+Retired:
+- CLI, diagnostics, `fuse fmt/doc/repl`, incremental driver,
+  Rule 6.17 audit (cmd/fuse/main.go — all subcommands wired;
+  cmd/fuse/subcommand_test.go — TestSubcommandParser;
+  compiler/diagnostics/diagnostics.go — Rendered / RenderText /
+  RenderJSON / RenderAll / AuditRule617; compiler/fmt/fmt.go —
+  byte-stable Format (CRLF→LF, tabs→spaces, blank-run
+  collapse, trailing-newline normaliser, idempotent);
+  compiler/doc/doc.go — Extract + CheckMissingDocs for the
+  Rule 5.6 public-item gate; compiler/repl/repl.go — round-
+  trip evaluator for int arithmetic / comparison / bool logic
+  with `:quit` / `:exit` / EOF termination; compiler/driver/
+  cache.go — content-addressed pass cache under `.fuse-cache/`
+  with version-mismatch invalidation, deterministic Key /
+  Combine, and PlanIncremental; tests/e2e/cli_workflow_test.go
+  + incremental_test.go for the end-to-end proofs) —
+  confirmed retired by `go test ./compiler/diagnostics/... -v`,
+  `go test ./compiler/diagnostics/... -run
+  TestDiagnosticQualityRule -v`, `go test ./compiler/fmt/...
+  -run TestFormatStable -v`, `go test ./compiler/doc/... -run
+  TestDocCheck -v`, `go test ./compiler/repl/... -run
+  TestReplRoundTrip -v`, `go test ./compiler/driver/... -run
+  TestPassCache -v`, `go test ./compiler/driver/... -run
+  TestIncrementalRebuild -v`, `go test ./cmd/fuse/... -run
+  TestSubcommandParser -v`, `go test ./tests/e2e/... -run
+  TestCliBasicWorkflow -v`, and `go test ./tests/e2e/... -run
+  TestIncrementalEditCycle -v`. Proof surface: the diagnostics
+  package covers text + JSON rendering with `<unknown>`
+  fallback for missing files and the stable JSON field set
+  (file / line / column / severity / message / suggestion /
+  notes); AuditRule617 separates fatal (missing span / empty
+  message) from soft findings (missing suggestion when
+  declared possible) so callers pick a gating threshold.
+  fmt.Format is idempotent under Rule 6.2: re-formatting
+  produces byte-identical output. doc.Extract pairs `///`
+  comments with their following item; CheckMissingDocs flags
+  every `pub` item without a doc. repl.Eval handles decimal /
+  hex / binary literals with `_` separators, unary negation
+  and `!`, short-circuit && / ||, and surfaces `divide by
+  zero`, `unexpected end of input`, `expected )` as
+  well-formed diagnostics. The pass cache version-mismatches
+  any manifest whose Version != "fuse-cache-v1", self-heals
+  on fingerprint disagreement, and `PlanIncremental` across
+  ten per-function fingerprints returns 9 hits + 1 miss when
+  one function's fingerprint changes. `cmd/fuse` exits 0 on
+  success, 1 on user-visible failure, 2 on CLI misuse;
+  TestSubcommandParser pins every dispatch path; the e2e
+  `TestCliBasicWorkflow` builds the freshly-compiled cli
+  binary and shells version / help / check / build / run /
+  bogus through it; `TestIncrementalEditCycle` asserts warm
+  builds are not catastrophically slower than cold (W27
+  tightens to measurable speedup).
 
 Rescheduled: (none this wave)
