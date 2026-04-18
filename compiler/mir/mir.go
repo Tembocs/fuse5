@@ -76,12 +76,60 @@ func (o Op) String() string {
 		return "call"
 	case OpDrop:
 		return "drop"
+	case OpCast:
+		return "cast"
+	case OpBorrow:
+		return "borrow"
+	case OpFnPtr:
+		return "fn_ptr"
+	case OpCallIndirect:
+		return "call_indirect"
+	case OpSliceNew:
+		return "slice_new"
+	case OpFieldRead:
+		return "field_read"
+	case OpStructNew:
+		return "struct_new"
+	case OpStructCopy:
+		return "struct_copy"
+	case OpFieldWrite:
+		return "field_write"
+	case OpMethodCall:
+		return "method_call"
+	case OpEqScalar:
+		return "eq_scalar"
+	case OpEqCall:
+		return "eq_call"
+	case OpWrappingAdd:
+		return "wrapping_add"
+	case OpWrappingSub:
+		return "wrapping_sub"
+	case OpWrappingMul:
+		return "wrapping_mul"
+	case OpCheckedAdd:
+		return "checked_add"
+	case OpCheckedSub:
+		return "checked_sub"
+	case OpCheckedMul:
+		return "checked_mul"
+	case OpSaturatingAdd:
+		return "saturating_add"
+	case OpSaturatingSub:
+		return "saturating_sub"
+	case OpSaturatingMul:
+		return "saturating_mul"
 	}
 	return "unknown"
 }
 
 // Inst is one non-terminator instruction inside a Block. Fields that
 // are unused for a given Op are zero.
+//
+// W15 extended the Inst schema to carry lowering metadata for the
+// consolidation wave: Mode (OpCast flavor), Flag (mutable borrow,
+// inclusive slice range), Extra (second auxiliary register for slice
+// ranges), FieldName (OpFieldRead/Write, OpStructNew, OpMethodCall),
+// and Fields (OpStructNew/OpStructCopy field bookkeeping).
 type Inst struct {
 	Op         Op
 	Dst        Reg
@@ -89,8 +137,18 @@ type Inst struct {
 	Rhs        Reg
 	IntValue   int64
 	ParamIndex int    // OpParam: position in the containing fn's param list
-	CallName   string // OpCall: C-level name of the callee
-	CallArgs   []Reg  // OpCall: argument registers in order
+	CallName   string // OpCall / OpFnPtr / OpMethodCall / OpEqCall / OpStructNew: mangled target name
+	CallArgs   []Reg  // OpCall / OpCallIndirect / OpMethodCall / OpEqCall: argument registers in order
+
+	// W15 consolidation fields. Each field is consumed by at most
+	// a handful of ops; zero values are correct for ops that do
+	// not carry the metadata.
+
+	Mode      int         // OpCast: CastMode — widen/narrow/reinterpret/etc.
+	Flag      bool        // OpBorrow: mutable borrow. OpSliceNew: inclusive range.
+	Extra     Reg         // OpSliceNew: high register (base+low+high+inclusive shape)
+	FieldName string      // OpFieldRead/OpFieldWrite/OpStructNew/OpMethodCall: field or method name
+	Fields    []StructField // OpStructNew/OpStructCopy: field value bookkeeping
 }
 
 // Terminator enumerates how a Block may end. Each Block has exactly
@@ -109,6 +167,13 @@ const (
 	// equal, control flows to TrueTarget; otherwise FalseTarget.
 	// Introduced at W10 to support cascading match dispatch.
 	TermIfEq
+	// TermUnreachable marks the block as structurally divergent
+	// (reference §57.4). A block that ends in TermUnreachable has
+	// no successors: codegen must not synthesise fallthrough reads
+	// or joined temporaries for the values that would "come out"
+	// of this block. Introduced at W15 to consolidate divergent
+	// control flow around panic / never-return calls.
+	TermUnreachable
 )
 
 // String renders a terminator for diagnostics.
@@ -122,6 +187,8 @@ func (t Terminator) String() string {
 		return "jump"
 	case TermIfEq:
 		return "if_eq"
+	case TermUnreachable:
+		return "unreachable"
 	}
 	return "unknown"
 }
@@ -378,7 +445,17 @@ func (f *Function) Validate() error {
 					return fmt.Errorf("mir.Validate: %s/block %d inst %d: drop target register %d is undefined", f.Name, blk.ID, i, in.Lhs)
 				}
 			default:
-				return fmt.Errorf("mir.Validate: %s/block %d inst %d: unknown op %d (W09 supports const_int/add/sub/mul/div/mod/param/call/drop)", f.Name, blk.ID, i, in.Op)
+				// W15 consolidation ops are all numeric >= OpCast.
+				// Route them through the W15 validator; if it does
+				// not recognise the op, fall through to the unknown
+				// op error below.
+				if in.Op >= OpCast {
+					if err := validateW15Inst(f, blk, i, in, defined); err != nil {
+						return err
+					}
+					break
+				}
+				return fmt.Errorf("mir.Validate: %s/block %d inst %d: unknown op %d (W09 supports const_int/add/sub/mul/div/mod/param/call/drop; W15 adds cast/borrow/fn_ptr/call_indirect/slice_new/field_read/struct_new/struct_copy/field_write/method_call/eq_scalar/eq_call/wrapping/checked/saturating arithmetic)", f.Name, blk.ID, i, in.Op)
 			}
 		}
 		switch blk.Term {
@@ -399,6 +476,15 @@ func (f *Function) Validate() error {
 			}
 			if blk.TrueTarget == NoBlock || blk.FalseTarget == NoBlock {
 				return fmt.Errorf("mir.Validate: %s/block %d: if_eq missing branch targets", f.Name, blk.ID)
+			}
+		case TermUnreachable:
+			// A divergent block has no successors and produces no
+			// value. ReturnReg must be NoReg; any value register the
+			// block computed is unobservable by design (reference
+			// §57.4). Nothing to check beyond the absence of a
+			// ReturnReg / branch target.
+			if blk.ReturnReg != NoReg {
+				return fmt.Errorf("mir.Validate: %s/block %d: unreachable block carries ReturnReg %d (structural divergence forbids observable returns)", f.Name, blk.ID, blk.ReturnReg)
 			}
 		default:
 			return fmt.Errorf("mir.Validate: %s/block %d: missing or invalid terminator (%s)", f.Name, blk.ID, blk.Term)
