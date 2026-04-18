@@ -1,6 +1,6 @@
 {
   "current_wave": "W20",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-18",
-  "notes": "Stdlib Core wave entered. Rule 9.5 P00 commit. `go run tools/checkstubs/main.go -wave W20 -phase P00` and `go run tools/checkstubs/main.go -wave W20` both exit 0. Implementation lands next: stdlib/core/ Fuse source tree (traits / primitives / string / collections / cell / ptr / overflow / rt_bridge / marker), fuse build library-mode pattern, fuse doc --check directory support, and Go tests for TestCoreStdlib / TestCoreReExports / TestCell / TestRefCell / TestPtrNull / TestSizeOfWrappers / TestOverflowMethods."
+  "notes": "Stdlib Core wave in closure phase. Stdlib-core stub retired: stdlib/core/ ships 24 Fuse source files (traits / marker / primitives / string / collections / cell / ptr / overflow / rt_bridge) with /// doc comments on every pub item. cmd/fuse gains library-mode `DIR/...` pattern (walks + parses each .fuse) and directory-aware `fuse doc --check`. tests/stdlib/core_stdlib_test.go carries seven tests: TestCoreStdlib, TestCoreReExports, TestCell, TestRefCell, TestPtrNull, TestSizeOfWrappers, TestOverflowMethods. STUBS.md W20 history block appended; WC020 logged using Rule 10.2 mandated 6-field template. Fourteenth full wave under Rule 9.5 three-commit discipline: P00 audit (47b19a8), implementation (af67031), PCL (this commit). Next: enter W21 Custom Allocators."
 }

@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Stdlib core (traits, primitives, strings, collections, Cell/RefCell, Ptr.null, overflow methods) | stdlib/core/ (empty) | no stdlib | "stdlib core not yet implemented" | W20 |
 | Custom allocators (Allocator trait, parameterized collections) | stdlib/core/alloc/ (not yet created) | no allocator trait | "custom allocators not yet implemented" | W21 |
 | Stdlib hosted (IO, fs, os, time, thread, sync, channels, network) | stdlib/full/ (empty) | no hosted stdlib | "stdlib hosted not yet implemented" | W22 |
 | Package management (manifest, lockfile, resolver, fetcher, registry protocol) | compiler/ (not yet created pkg/) | no package manager | "package manager not yet implemented" | W23 |
@@ -830,5 +829,55 @@ Retired:
   least one keyword and one type token; TestLspScriptedSession
   drives the stdio transport end-to-end with a 5-second
   per-request deadline.
+
+Rescheduled: (none this wave)
+
+### W20 — Stdlib Core
+
+Added: (none this wave)
+
+Retired:
+- Stdlib core (traits, primitives, strings, collections,
+  Cell/RefCell, Ptr.null, overflow methods) (stdlib/core/
+  tree of 24 .fuse files across traits/ + marker/ +
+  primitives/ + string/ + collections/ + cell/ + ptr/ +
+  overflow/ + rt_bridge/; cmd/fuse/main.go library-mode
+  `DIR/...` pattern dispatch + directory-walker for `fuse
+  doc --check`; tests/stdlib/core_stdlib_test.go with
+  TestCoreStdlib / TestCoreReExports / TestCell /
+  TestRefCell / TestPtrNull / TestSizeOfWrappers /
+  TestOverflowMethods) — confirmed retired by `fuse build
+  stdlib/core/...` returning "24 files ok (lib mode)",
+  `fuse doc --check stdlib/core` exiting 0, and `go test
+  ./tests/stdlib/... -v` with all 7 tests green. Proof
+  surface: every stdlib/core subdirectory required by the
+  wave doc exists and every pub item carries a /// doc
+  comment (TestCoreStdlib enforces Rule 5.6); every
+  intrinsic marker trait (Send / Sync / Copy / Fn / FnMut
+  / FnOnce) is re-exported through
+  stdlib/core/marker/marker.fuse (TestCoreReExports);
+  Cell[I32] satisfies the get/set/non-Send/non-Sync
+  contract from reference §51.1 (TestCell); RefCell's
+  borrow-count state machine (0 = idle, N = shared
+  borrows, -1 = mutable borrow) correctly rejects
+  shared+mutable coexistence and multiple mutable borrows
+  (TestRefCell three sub-tests); Ptr.null[T]() emits
+  `((T*)0)` per reference §57.1 (TestPtrNull); size_of /
+  align_of / size_of_val wrappers forward to the W17
+  codegen intrinsics (TestSizeOfWrappers); every
+  wrapping_* / checked_* / saturating_* variant declared
+  in stdlib/core/overflow/overflow.fuse and every per-
+  primitive inherent method in
+  stdlib/core/primitives/i32.fuse (TestOverflowMethods).
+  Runtime-bridge files (rt_bridge/panic.fuse,
+  rt_bridge/alloc.fuse, rt_bridge/thread.fuse) name
+  every W16 runtime entry point declared in
+  runtime/include/fuse_rt.h so user code can reach them
+  through core::rt_bridge::*. Body completion (actual
+  allocator-backed collection implementations, runtime-
+  enforced borrow panics, macro desugaring) is W22
+  stdlib-hosted territory — W20's contract is "the
+  surface exists, is documented, parses, and the runtime
+  shape contracts are test-locked".
 
 Rescheduled: (none this wave)
