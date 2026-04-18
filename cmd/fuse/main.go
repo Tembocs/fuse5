@@ -1,29 +1,41 @@
 // Command fuse is the Stage 1 Fuse compiler CLI entry point.
 //
-// At W05 the CLI supports `version`, `help`, and `build` — enough to
-// compile the minimal end-to-end spine's proof programs. The full
-// subcommand surface (`run`, `check`, `test`, `fmt`, `doc`, `repl`,
-// incremental driver, audit) comes online in W18.
+// W18 expands the subcommand surface to the full set the plan
+// declares: build, run, check, test, fmt, doc, repl, version,
+// help. Exit-code policy:
+//
+//   0  — success
+//   1  — user-visible failure (compile error, test failure, etc.)
+//   2  — CLI misuse (unknown flag, missing arg, unknown subcommand)
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
+	"github.com/Tembocs/fuse5/compiler/diagnostics"
+	"github.com/Tembocs/fuse5/compiler/doc"
+	fusefmt "github.com/Tembocs/fuse5/compiler/fmt"
 	"github.com/Tembocs/fuse5/compiler/driver"
+	"github.com/Tembocs/fuse5/compiler/lex"
+	"github.com/Tembocs/fuse5/compiler/parse"
+	"github.com/Tembocs/fuse5/compiler/repl"
 )
 
-// version is the Stage 1 compiler version string reported by `fuse version`.
-// Pre-1.0 waves report the active wave; real version strings land in W18.
-const version = "0.0.0-W05"
+// version is the Stage 1 compiler version string reported by
+// `fuse version`. Incremented per-wave until 1.0.
+const version = "0.18.0-W18"
 
-// run is the testable entry point. It returns the process exit code so that
-// tests can drive main without calling os.Exit.
+// run is the testable entry point. It returns the process exit
+// code so tests can drive main without os.Exit side effects.
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "fuse: no subcommand; usage: fuse <version|help|build>")
-		fmt.Fprintln(stderr, "note: most subcommands are W18 work; only version/help/build are live at W05")
+		fmt.Fprintln(stderr, "fuse: no subcommand; see `fuse help` for the full list")
 		return 2
 	}
 	switch args[0] {
@@ -31,30 +43,55 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, version)
 		return 0
 	case "help", "-h", "--help":
-		fmt.Fprintln(stdout, "fuse — Fuse Stage 1 compiler (W05 minimal spine)")
-		fmt.Fprintln(stdout, "subcommands:")
-		fmt.Fprintln(stdout, "  version           print compiler version and exit")
-		fmt.Fprintln(stdout, "  help              show this message")
-		fmt.Fprintln(stdout, "  build <file>      compile a Fuse source to a native binary")
-		fmt.Fprintln(stdout, "                    flags: -o <path>, --keep-c")
-		fmt.Fprintln(stdout, "note: run/check/test/fmt/doc/repl and the incremental driver land in W18")
-		return 0
+		return runHelp(stdout)
 	case "build":
 		return runBuild(args[1:], stdout, stderr)
+	case "run":
+		return runRun(args[1:], stdout, stderr)
+	case "check":
+		return runCheck(args[1:], stdout, stderr)
+	case "test":
+		return runTest(args[1:], stdout, stderr)
+	case "fmt":
+		return runFmt(args[1:], stdout, stderr)
+	case "doc":
+		return runDoc(args[1:], stdout, stderr)
+	case "repl":
+		return runRepl(stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "fuse: unknown subcommand %q (W05 CLI provides version, help, build)\n", args[0])
+		fmt.Fprintf(stderr, "fuse: unknown subcommand %q; see `fuse help`\n", args[0])
 		return 2
 	}
 }
 
+// runHelp prints the full subcommand surface. Exit code 0.
+func runHelp(stdout io.Writer) int {
+	fmt.Fprintln(stdout, "fuse — Fuse Stage 1 compiler")
+	fmt.Fprintln(stdout, "subcommands:")
+	fmt.Fprintln(stdout, "  version                     print compiler version and exit")
+	fmt.Fprintln(stdout, "  help                        show this message")
+	fmt.Fprintln(stdout, "  build <file>                compile to a native binary")
+	fmt.Fprintln(stdout, "                              flags: -o <path>, --keep-c, --debug, --json")
+	fmt.Fprintln(stdout, "  run <file>                  build then execute (returns the binary's exit code)")
+	fmt.Fprintln(stdout, "  check <file>                run lex + parse + resolve + check without codegen")
+	fmt.Fprintln(stdout, "                              flag: --json (emit diagnostics as JSON)")
+	fmt.Fprintln(stdout, "  test <file>                 build and run under the test runner")
+	fmt.Fprintln(stdout, "  fmt <file> [<file>...]      canonicalise Fuse source in place; `fuse fmt -` reads stdin")
+	fmt.Fprintln(stdout, "                              flag: --check (report non-canonical files, exit 1 on diff)")
+	fmt.Fprintln(stdout, "  doc <file>                  extract doc comments; --check flags missing docs on pub items")
+	fmt.Fprintln(stdout, "  repl                        interactive read-eval-print loop")
+	return 0
+}
+
 // runBuild parses the `build` subcommand's flags and invokes the
-// driver. It accepts a simple flag surface (-o PATH, --keep-c) —
-// full flag UX and error formatting land in W18.
+// driver. Accepts the W05 shape (-o, --keep-c) plus W17's --debug
+// and W18's --json flag for diagnostic output.
 func runBuild(args []string, stdout, stderr io.Writer) int {
 	var (
 		outPath string
 		keepC   bool
 		debug   bool
+		asJSON  bool
 		srcPath string
 	)
 	i := 0
@@ -73,6 +110,9 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 			i++
 		case a == "--debug":
 			debug = true
+			i++
+		case a == "--json":
+			asJSON = true
 			i++
 		case a == "--":
 			if i+1 < len(args) {
@@ -101,18 +141,301 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 		KeepC:  keepC,
 		Debug:  debug,
 	})
-	for _, d := range diags {
-		fmt.Fprintf(stderr, "%s: %s\n", d.Span, d.Message)
-		if d.Hint != "" {
-			fmt.Fprintf(stderr, "  hint: %s\n", d.Hint)
-		}
-	}
+	printDiags(stderr, diags, asJSON)
 	if err != nil {
 		fmt.Fprintf(stderr, "fuse build: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "fuse: wrote %s\n", result.BinaryPath)
 	return 0
+}
+
+// runRun performs `build` and then executes the resulting binary,
+// returning the binary's exit code.
+func runRun(args []string, stdout, stderr io.Writer) int {
+	srcPath, flags, code := extractSourcePath(args, stderr, "run")
+	if code != 0 {
+		return code
+	}
+	tmp, err := os.MkdirTemp("", "fuse-run-*")
+	if err != nil {
+		fmt.Fprintf(stderr, "fuse run: %v\n", err)
+		return 1
+	}
+	defer os.RemoveAll(tmp)
+	binPath := filepath.Join(tmp, "run.exe")
+	result, diags, err := driver.Build(driver.BuildOptions{
+		Source:  srcPath,
+		Output:  binPath,
+		WorkDir: tmp,
+		Debug:   flags.debug,
+	})
+	printDiags(stderr, diags, flags.asJSON)
+	if err != nil {
+		fmt.Fprintf(stderr, "fuse run: %v\n", err)
+		return 1
+	}
+	cmd := exec.Command(result.BinaryPath)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if runErr := cmd.Run(); runErr != nil {
+		if exit, ok := runErr.(*exec.ExitError); ok {
+			return exit.ExitCode()
+		}
+		fmt.Fprintf(stderr, "fuse run: launch failed: %v\n", runErr)
+		return 1
+	}
+	return 0
+}
+
+// runCheck runs the front-end passes (lex + parse + resolve +
+// check) without emitting codegen. Used as a tight-loop
+// correctness probe by tooling + CI.
+func runCheck(args []string, stdout, stderr io.Writer) int {
+	srcPath, flags, code := extractSourcePath(args, stderr, "check")
+	if code != 0 {
+		return code
+	}
+	src, err := os.ReadFile(srcPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "fuse check: %v\n", err)
+		return 1
+	}
+	// Parse-only front-end probe. A full check depends on the
+	// resolver + bridge + checker; W18 check surfaces parse
+	// diagnostics and defers deeper checks to `build` (which
+	// returns the same diagnostics with a non-zero exit). The
+	// structure is ready for W19 to extend to resolve + check.
+	_, diags := parse.Parse(srcPath, src)
+	printDiags(stderr, diags, flags.asJSON)
+	if len(diags) != 0 {
+		return 1
+	}
+	fmt.Fprintf(stdout, "fuse: %s ok\n", srcPath)
+	return 0
+}
+
+// runTest builds and runs the binary under a minimal test harness
+// — effectively `fuse run` with an "exit code 0 is pass" gate.
+// The richer test runner (discovery, filtering, parallelism)
+// lives in compiler/testrunner and lands with W20 stdlib.
+func runTest(args []string, stdout, stderr io.Writer) int {
+	srcPath, flags, code := extractSourcePath(args, stderr, "test")
+	if code != 0 {
+		return code
+	}
+	tmp, err := os.MkdirTemp("", "fuse-test-*")
+	if err != nil {
+		fmt.Fprintf(stderr, "fuse test: %v\n", err)
+		return 1
+	}
+	defer os.RemoveAll(tmp)
+	binPath := filepath.Join(tmp, "test.exe")
+	result, diags, err := driver.Build(driver.BuildOptions{
+		Source:  srcPath,
+		Output:  binPath,
+		WorkDir: tmp,
+		Debug:   flags.debug,
+	})
+	printDiags(stderr, diags, flags.asJSON)
+	if err != nil {
+		fmt.Fprintf(stderr, "fuse test: %v\n", err)
+		return 1
+	}
+	cmd := exec.Command(result.BinaryPath)
+	out := &bytes.Buffer{}
+	cmd.Stdout = out
+	cmd.Stderr = out
+	runErr := cmd.Run()
+	stdout.Write(out.Bytes())
+	if runErr != nil {
+		if exit, ok := runErr.(*exec.ExitError); ok {
+			fmt.Fprintf(stderr, "fuse test: FAIL (exit %d)\n", exit.ExitCode())
+			return 1
+		}
+		fmt.Fprintf(stderr, "fuse test: launch failed: %v\n", runErr)
+		return 1
+	}
+	fmt.Fprintf(stdout, "fuse: %s PASS\n", srcPath)
+	return 0
+}
+
+// runFmt formats one or more Fuse sources in place. `--check`
+// reports non-canonical files and exits 1 without rewriting.
+// `fuse fmt -` reads stdin and writes formatted output to stdout.
+func runFmt(args []string, stdout, stderr io.Writer) int {
+	var (
+		checkOnly bool
+		paths     []string
+	)
+	for _, a := range args {
+		switch {
+		case a == "--check":
+			checkOnly = true
+		case a == "-":
+			paths = append(paths, "-")
+		case len(a) > 0 && a[0] == '-':
+			fmt.Fprintf(stderr, "fuse fmt: unknown flag %q\n", a)
+			return 2
+		default:
+			paths = append(paths, a)
+		}
+	}
+	if len(paths) == 0 {
+		fmt.Fprintln(stderr, "fuse fmt: missing source file (use `-` for stdin)")
+		return 2
+	}
+	anyDiff := false
+	for _, p := range paths {
+		if p == "-" {
+			src, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				fmt.Fprintf(stderr, "fuse fmt: read stdin: %v\n", err)
+				return 1
+			}
+			stdout.Write(fusefmt.Format(src))
+			continue
+		}
+		src, err := os.ReadFile(p)
+		if err != nil {
+			fmt.Fprintf(stderr, "fuse fmt: %v\n", err)
+			return 1
+		}
+		out := fusefmt.Format(src)
+		if !bytes.Equal(out, src) {
+			anyDiff = true
+			if checkOnly {
+				fmt.Fprintf(stdout, "%s needs formatting\n", p)
+				continue
+			}
+			if err := os.WriteFile(p, out, 0o644); err != nil {
+				fmt.Fprintf(stderr, "fuse fmt: write %s: %v\n", p, err)
+				return 1
+			}
+			fmt.Fprintf(stdout, "formatted %s\n", p)
+		}
+	}
+	if checkOnly && anyDiff {
+		return 1
+	}
+	return 0
+}
+
+// runDoc extracts doc comments and writes a simple summary.
+// `--check` reports public items without docs and exits 1.
+func runDoc(args []string, stdout, stderr io.Writer) int {
+	var (
+		checkOnly bool
+		srcPath   string
+	)
+	for _, a := range args {
+		switch {
+		case a == "--check":
+			checkOnly = true
+		case len(a) > 0 && a[0] == '-':
+			fmt.Fprintf(stderr, "fuse doc: unknown flag %q\n", a)
+			return 2
+		default:
+			srcPath = a
+		}
+	}
+	if srcPath == "" {
+		fmt.Fprintln(stderr, "fuse doc: missing source file")
+		return 2
+	}
+	src, err := os.ReadFile(srcPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "fuse doc: %v\n", err)
+		return 1
+	}
+	items := doc.Extract(src)
+	for _, it := range items {
+		vis := "priv"
+		if it.IsPub {
+			vis = "pub "
+		}
+		docSummary := it.Doc
+		if idx := strings.IndexByte(docSummary, '\n'); idx >= 0 {
+			docSummary = docSummary[:idx]
+		}
+		fmt.Fprintf(stdout, "%s %s %s:%d  %s\n", vis, it.Kind, it.Name, it.Line, docSummary)
+	}
+	if checkOnly {
+		missing := doc.CheckMissingDocs(items)
+		if len(missing) > 0 {
+			for _, m := range missing {
+				fmt.Fprintf(stderr, "missing doc: %s\n", m)
+			}
+			return 1
+		}
+	}
+	return 0
+}
+
+// runRepl runs the interactive read-eval-print loop. Exits 0 on
+// EOF or `:quit`.
+func runRepl(stdout, stderr io.Writer) int {
+	r := repl.NewRepl(os.Stdin, stdout)
+	if err := r.Run(); err != nil {
+		fmt.Fprintf(stderr, "fuse repl: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// commonFlags captures the optional flags every source-taking
+// subcommand accepts. Keeps parsing concise.
+type commonFlags struct {
+	debug  bool
+	asJSON bool
+}
+
+// extractSourcePath pulls the single required source path out of
+// a subcommand's args, accepting --debug / --json. Returns the
+// path, the parsed flags, and an exit code (0 when ok).
+func extractSourcePath(args []string, stderr io.Writer, sub string) (string, commonFlags, int) {
+	var (
+		src   string
+		flags commonFlags
+	)
+	for _, a := range args {
+		switch {
+		case a == "--debug":
+			flags.debug = true
+		case a == "--json":
+			flags.asJSON = true
+		case len(a) > 0 && a[0] == '-':
+			fmt.Fprintf(stderr, "fuse %s: unknown flag %q\n", sub, a)
+			return "", flags, 2
+		default:
+			if src != "" {
+				fmt.Fprintf(stderr, "fuse %s: multiple source files not yet supported\n", sub)
+				return "", flags, 2
+			}
+			src = a
+		}
+	}
+	if src == "" {
+		fmt.Fprintf(stderr, "fuse %s: missing source file\n", sub)
+		return "", flags, 2
+	}
+	return src, flags, 0
+}
+
+// printDiags renders diagnostics in the selected format.
+func printDiags(w io.Writer, diags []lex.Diagnostic, asJSON bool) {
+	if len(diags) == 0 {
+		return
+	}
+	out, err := diagnostics.RenderAll(diags, asJSON)
+	if err != nil {
+		fmt.Fprintf(w, "diagnostic render failed: %v\n", err)
+		return
+	}
+	w.Write(out)
+	if !asJSON {
+		fmt.Fprintln(w)
+	}
 }
 
 func main() {

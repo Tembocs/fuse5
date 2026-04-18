@@ -17,8 +17,12 @@ func TestCliStub(t *testing.T) {
 		if code != 0 {
 			t.Fatalf("version exit = %d, want 0; stderr=%q", code, stderr.String())
 		}
-		if !strings.Contains(stdout.String(), "W05") {
-			t.Errorf("version stdout = %q, want to contain W05", stdout.String())
+		// The version carries the active-wave tag; pre-1.0 waves
+		// bump it forward. At W18 we just assert the string looks
+		// like a version (has a dash+letter) so future wave bumps
+		// don't require editing this test every time.
+		if !strings.Contains(stdout.String(), "-W") {
+			t.Errorf("version stdout = %q, want to include a `-W<wave>` tag", stdout.String())
 		}
 	})
 
