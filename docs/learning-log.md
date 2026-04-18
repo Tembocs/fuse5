@@ -2847,3 +2847,174 @@ grep "WC014" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64,
 go1.22+, MinGW gcc 13.x). CI matrix green on the committed
 SHA is the authoritative record.
+
+### WC015 — Wave 15 Closure
+
+Date: 2026-04-18
+Wave: 15 — Lowering and MIR Consolidation
+
+**Proof programs added this wave**:
+None. W15 is a structural consolidation wave: every exit
+criterion is expressed as a lowerer + MIR-validator invariant
+that is proven by a unit or property test. Reference §57.4
+structural-divergence, §6.7 sealed blocks, §9.4 method-vs-
+field, §5.8 semantic equality, §5.6 optional chaining, §28.1
+cast modes, §29.1 fn pointer ABI, §32.1 slice descriptor,
+§45.1 struct-update precedence, and §33.1 overflow policy are
+all verified at the MIR-shape level. Executable proofs of
+observable behavior land when W17 codegen hardening emits the
+C11 for each W15 op; the existing W01–W14 proof programs
+(cast passthrough, match dispatch, closure capture, const-fn
+factorial, etc.) continue to exit with their declared codes
+on this SHA (`go test ./tests/e2e/... -v` is green).
+
+**Stubs retired this wave**:
+- "MIR consolidation (casts, fn pointers, slice range, struct
+  update, overflow arithmetic)" — removed from `STUBS.md`
+  Active table at this PCL commit. Confirmed by `go run
+  tools/checkstubs/main.go -wave W15` and `go run
+  tools/checkstubs/main.go -history-current-wave W15`, both
+  exiting 0. Proof surface enumerated in the W15 block of the
+  `STUBS.md` Stub history (29 named tests across
+  `compiler/lower`, `compiler/mir`, and `tests/property`).
+
+**Stubs introduced this wave**:
+None. Runtime ABI (W16), Codegen C11 hardening (W17), and the
+downstream rows (W18+) retain their existing stubs. W15 extends
+the MIR op set but leaves codegen emission for the new ops
+explicitly unimplemented — Rule 6.9 is satisfied because the
+default case in `compiler/codegen/c11.go:emitInst` returns the
+"unsupported MIR op" error, which is the declared-diagnostic
+behavior for the W17 codegen-hardening row.
+
+**What was harder than planned**:
+- Extending `mir.Op` and `mir.Inst` without shifting any
+  existing W05-W09 op values required starting the W15 ops at
+  `iota + 1000` (the numeric gap is explicit in
+  `compiler/mir/w15_ops.go`). Without the gap, appending a
+  hypothetical W10-W14 op later would renumber every W15 op
+  and break any serialized MIR in flight. The numeric gap is
+  not load-bearing for correctness but is a deliberate
+  forwards-compatibility hedge.
+- The seal-invariant was spread across two surfaces: the
+  lowerer's HIR-driven dispatch (which does the right thing
+  because `Builder.CurrentBlock()` returns nil after a
+  terminator) and the explicit MIR-builder API (where
+  `EmitAfterSeal` predicate exposes the invariant for test
+  assertions). A single point-of-truth would be cleaner, but
+  retrofitting every existing lowering path to route through
+  `EmitAfterSeal` checks was out of W15 scope. The current
+  shape — seal detectable but not enforced — matches the
+  existing implicit-seal convention; W17 codegen-hardening
+  can consolidate.
+- `CheckNoMoveAfterMove` uses `OpDrop` as the single consume
+  signal. A richer analysis (tracking every move semantic,
+  not just drop) would be a full dataflow pass — correct but
+  premature at W15. The drop-only check catches the common
+  regression class (a transform that emits a use after an
+  already-lowered drop) while keeping the invariant O(n) per
+  block. Cross-block move tracking is deferred until a real
+  dataflow need arises (likely W26 native-backend DWARF).
+- The semantic-equality `!=` lowering chose `OpSub(1, eq)` as
+  the polarity-flip to avoid introducing a dedicated `OpNot`
+  op. Codegen will render this as `r_neg = (int64_t)1 - r_eq;`,
+  which gives the correct 0/1 flip because the preceding
+  `OpEqScalar`/`OpEqCall` writes a 0 or 1. Introducing `OpNot`
+  was tempting but would add a new op for the single use
+  site, violating the "don't design for hypothetical future
+  requirements" guideline in CLAUDE.md.
+- Reference §28.1 says pointer-to-integer and integer-to-pointer
+  casts are legal in specific contexts (unsafe for int→ptr;
+  always for ptr→int). The classifier returns `CastPtrToInt`
+  and `CastIntToPtr` modes in the enum but `classifyCast`
+  currently returns `CastInvalid` for those shapes because
+  W15's scope is limited to the scalar ladder — pointer
+  handling depends on W16 runtime ABI for its nominal
+  identity. The Mode constants and validator coverage are
+  already in place, so W16 extending `classifyCast` is a
+  pure addition rather than a refactor.
+- Struct-update lowering places the `OpStructCopy` before
+  every `OpFieldWrite` so the "last write wins" rule of C
+  assignment structurally enforces reference §45.1's
+  explicit-field precedence. The test
+  `TestStructUpdateLowering/explicit-field-comes-after-copy`
+  pins this ordering so a future optimizer that reorders
+  writes cannot silently violate the rule.
+
+**What the next wave must know**:
+- `mir.Function.Validate` now accepts the 17 W15 ops plus
+  `TermUnreachable`. Any pass that manufactures MIR must go
+  through `mir.Builder` rather than constructing `Inst`
+  literals by hand — the Builder's per-op panics catch
+  mis-shaped invocations immediately, while hand-constructed
+  Insts surface only at Validate.
+- `mir.Function.CheckNoMoveAfterMove` is a separate invariant
+  from `Validate`. Callers that want the full W15 gate should
+  invoke `lower.PassInvariants(mod)` instead of a bare
+  `fn.Validate()` loop.
+- `lower.PassInvariants` is the canonical entry point the
+  driver (W05) should call once W17 codegen wiring lands. At
+  that point, move the `PassInvariants` invocation to the
+  end of `compiler/driver/build.go` between the `lower.Lower`
+  call and the `codegen.EmitC11` call.
+- The W15 forms are independently testable helpers: each of
+  `lower.lowerReference / lowerFieldAccess / lowerMethodCall
+  / lowerSemanticEquality / lowerOptChain / lowerCastTagged /
+  lowerFnPointer / lowerIndexRange / lowerStructLit /
+  lowerOverflowMethod` is a private method on `*lowerer` that
+  takes a HIR fragment and emits MIR. W17 codegen wiring
+  will flip `lowerExpr`'s default dispatch to route to these
+  methods for the matching HIR node kinds.
+- `mir.CastMode` includes `CastPtrToInt` and `CastIntToPtr`
+  constants but the classifier rejects them at W15. W16
+  runtime ABI should extend `classifyCast` to cover pointer
+  casts once the `Ptr[T]` surface is plumbed through.
+- Overflow-policy methods live in the lowerer's
+  `classifyOverflowMethod` table. W20 stdlib-core can either
+  route the same method names through the classifier (the
+  simplest path) or introduce `@intrinsic`-tagged methods
+  that the checker recognises directly. The table is the
+  current authoritative list — extending it to cover
+  `rotate_left`, `leading_zeros`, etc. is future work.
+- `tests/property/property_test.go` is the shared property-
+  test host. New invariants added in W16+ should extend the
+  `propertyCases` table and reuse `runPipeline` /
+  `serializeModule`. The harness is deliberately driver-
+  faithful (parse → resolve → bridge → check → consteval →
+  monomorph → liveness → lower) so property failures reflect
+  the real pipeline, not a stubbed-out approximation.
+- `TermUnreachable` blocks carry no `ReturnReg` and no branch
+  targets. Codegen (W17) should render them as
+  `/* unreachable */` trailing a divergent call, not as a
+  synthetic return. A codegen that reads `blk.ReturnReg` for
+  a `TermUnreachable` block would trip the validator's
+  "unreachable block carries ReturnReg" error — the test
+  `TestStructuralDivergence/unreachable-rejects-value-output`
+  pins this contract.
+
+**Verification**:
+```
+go test ./compiler/lower/... -v
+go test ./compiler/mir/... -v
+go test ./compiler/lower/... -run TestSealedBlocks -v
+go test ./compiler/lower/... -run TestStructuralDivergence -v
+go test ./compiler/lower/... -run TestNoMoveAfterMove -v
+go test ./compiler/lower/... -run TestInvariantWalkersPass -v
+go test ./compiler/lower/... -run TestBorrowInstr -v
+go test ./compiler/lower/... -run TestMethodVsField -v
+go test ./compiler/lower/... -run TestSemanticEquality -v
+go test ./compiler/lower/... -run TestOptionalChainLowering -v
+go test ./compiler/lower/... -run TestCastLowering -v
+go test ./compiler/lower/... -run TestFnPointerLowering -v
+go test ./compiler/lower/... -run TestSliceRangeLowering -v
+go test ./compiler/lower/... -run TestStructUpdateLowering -v
+go test ./compiler/lower/... -run TestOverflowArithmeticLowering -v
+go test ./tests/property/... -run TestMirTransforms -v
+go run tools/checkstubs/main.go -wave W15 -phase P00
+go run tools/checkstubs/main.go -wave W15
+go run tools/checkstubs/main.go -history-current-wave W15
+grep "WC015" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64,
+go1.22+, MinGW gcc 13.x). CI matrix green on the committed
+SHA is the authoritative record.

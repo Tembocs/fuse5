@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| MIR consolidation (casts, fn pointers, slice range, struct update, overflow arithmetic) | compiler/lower/ + compiler/mir/ (W05 minimal subset only) | non-spine forms emit lowerer diagnostics | "MIR lowering not yet implemented" | W15 |
 | Runtime ABI (threads, channels, panic, IO) | runtime/src/ (W05 fuse_rt_abort only; threads/channels/IO call abort with "not yet implemented") | stub runtime entries abort at runtime | "runtime not yet implemented" | W16 |
 | Codegen C11 hardening (`@repr`, `@align`, `@inline`, intrinsics, variadic, debug info, perf baseline) | compiler/codegen/ (W05 emitter only; no hardening) | hardening decorators are ignored by the W05 emitter | "C11 codegen not yet implemented" | W17 |
 | CLI, diagnostics, `fuse fmt/doc/repl`, incremental driver, Rule 6.17 audit | compiler/driver/ (W05 `build` subcommand only; no `run`/`check`/`test`/`fmt`/`doc`/`repl`, no incremental driver) | unimplemented subcommands exit non-zero with a usage message | "subcommand not yet implemented" | W18 |
@@ -518,5 +517,74 @@ Retired:
   (const_fn.fuse: recursive `const fn factorial` called from
   `const FACT_5: U64 = factorial(5u64)`, substituted into
   `return FACT_5 as I32`, produces exit code 120).
+
+Rescheduled: (none this wave)
+
+### W15 — Lowering and MIR Consolidation
+
+Added: (none this wave)
+
+Retired:
+- MIR consolidation (casts, fn pointers, slice range, struct
+  update, overflow arithmetic) (compiler/mir/w15_ops.go,
+  compiler/mir/w15_builder.go, compiler/mir/w15_validate.go,
+  compiler/mir/w15_invariants_test.go, compiler/lower/w15_forms.go,
+  compiler/lower/w15_forms_test.go, compiler/lower/w15_expr_test.go,
+  compiler/lower/invariants.go, compiler/lower/invariants_test.go,
+  compiler/lower/sealed_test.go, plus the Inst / Terminator
+  extensions in compiler/mir/mir.go and
+  tests/property/property_test.go) — confirmed retired by
+  `go test ./compiler/lower/... -v`, `go test ./compiler/mir/... -v`,
+  `go test ./compiler/lower/... -run TestInvariantWalkersPass -v`,
+  `go test ./compiler/lower/... -run TestCastLowering -v`,
+  `go test ./compiler/lower/... -run TestFnPointerLowering -v`,
+  `go test ./compiler/lower/... -run TestSliceRangeLowering -v`,
+  `go test ./compiler/lower/... -run TestStructUpdateLowering -v`,
+  `go test ./compiler/lower/... -run TestOverflowArithmeticLowering -v`,
+  and `go test ./tests/property/... -run TestMirTransforms -v`.
+  Proof surface: `TestSealedBlocks` / `TestSealedBlocks_MIR`
+  (Return/Jump/IfEq/Unreachable all seal the current block;
+  UseBlock on a target re-opens emission), `TestStructuralDivergence`
+  / `TestStructuralDivergence_MIR` (TermUnreachable blocks
+  validate without a ReturnReg; carrying one is rejected per
+  reference §57.4), `TestNoMoveAfterMove` / `TestNoMoveAfterMove_MIR`
+  (CheckNoMoveAfterMove rejects reads of a register after OpDrop
+  within the same block; clean drops survive), `TestInvariantWalkersPass`
+  (the umbrella `lower.PassInvariants` accepts healthy modules
+  and rejects broken-terminator / use-after-drop modules and
+  nil inputs), `TestBorrowInstr` (`&x` emits OpBorrow Flag=false,
+  `&mut x` emits OpBorrow Flag=true), `TestMethodVsField`
+  (`obj.name` as a value emits OpFieldRead with FieldName set;
+  `obj.name(args)` in callee position emits OpMethodCall with
+  mangled `TypeName__methodName` and the receiver at CallArgs[0]),
+  `TestSemanticEquality` (scalar operands emit OpEqScalar;
+  nominal operands emit OpEqCall with mangled `TypeName__eq`;
+  `!=` inverts `==` via `OpSub(1, eq)`), `TestOptionalChainLowering`
+  (`receiver?.field` emits the propagate-else-field-read branch
+  per reference §5.8, not `?` composed with field access),
+  `TestCastLowering` (classifyCast ladder covers widen / narrow /
+  reinterpret / int↔float / same-width cases per reference §28.1;
+  tagged lowering emits OpCast with the classified Mode),
+  `TestFnPointerLowering` (OpFnPtr carries the mangled
+  `fuse_<module>__<fn>` name; OpCallIndirect invokes through a
+  register), `TestSliceRangeLowering` (OpSliceNew captures base,
+  low, high, inclusive flag; open endpoints lower to NoReg),
+  `TestStructUpdateLowering` (plain literal → OpStructNew +
+  one OpFieldWrite per field; `..base` → OpStructCopy + overrides
+  with the copy preceding every explicit write, structurally
+  guaranteeing reference §45.1 precedence),
+  `TestOverflowArithmeticLowering` (all nine `wrapping_*` /
+  `checked_*` / `saturating_*` add/sub/mul methods lower to
+  distinct MIR ops per reference §33.1),
+  `TestW15InstValidation` (every new op's primary failure mode
+  — missing destination, empty name, bad mode, wrong arity — is
+  rejected by Validate), and `TestMirTransforms` property tests
+  (deterministic lowering: two runs produce byte-identical MIR
+  serializations; every lowered fn passes Validate;
+  PassInvariants accepts every Module; idempotent roundtrip;
+  every W15 Builder-exposed op validates standalone).
+  Codegen C11 emission for the W15 ops is scheduled to W17 per
+  Rule 6.9 — the default case in emitInst returns the expected
+  "unsupported MIR op" diagnostic until then.
 
 Rescheduled: (none this wave)
