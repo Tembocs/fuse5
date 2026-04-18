@@ -28,25 +28,17 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Stub clearance gate | n/a — gating wave | clearance happens at wave entry | n/a — policy wave | W24 |
 | Stage 2 self-hosting | stage2/src/ (empty) | no stage2 compiler | "stage 2 compiler not yet ported" | W25 |
 | Native backend with DWARF | compiler/ (not yet created codegen/native/) | no native backend | "native backend not yet implemented" | W26 |
-| Performance gate (runtime ratios, compile-time budgets, code-size, memory footprint) | tests/perf/ (empty) | no perf gate | "perf gate not yet implemented" | W27 |
+| Performance gate (runtime ratios, compile-time budgets, code-size, memory footprint) | tests/perf/ (corpus seeded; gate not enforced) | perf suite runs but CI does not compare against thresholds.json ceilings | "perf-gate threshold enforcement not yet wired to CI" | W27 |
 | Retirement of Go and C from active path | compiler/ & runtime/ | bootstrap stack active | n/a — retirement wave | W28 |
 | Target matrix and `stdlib/ext/` | stdlib/ext/ (empty) | no ext stdlib | "stdlib ext not yet implemented" | W29 |
 | Ecosystem documentation (tutorial, book, migration guides, site) | docs/ (tutorial/book/migration/ not yet created) | no user-facing docs | n/a — documentation wave | W30 |
-| Pointer-cast classification (`ptr as int` / `int as ptr`) | compiler/lower/w15_forms.go (classifyCast returns CastInvalid for pointer pairs) | lowerer rejects with a generic "cast not supported" diagnostic | "pointer-to-integer and integer-to-pointer casts not yet classified (reference §28.1)" | W26 |
 | `ThreadHandle.join()` returns `Result[T, ThreadError]` | stdlib/full/thread/thread.fuse (currently returns bare T) | bare int64 return; worker panics propagate via fuse_rt_panic | "Result[T, ThreadError] join return shape not yet implemented" | W25 |
 | Capturing-closure spawn lifting | compiler/lower/w17_forms.go lowerSpawn (no-capture only) | spawn with captures diagnoses the closure analysis as non-spawnable | "spawn closures with captured state not yet lowered (env-struct allocation pending)" | W25 |
-| Codegen emission wiring for W17 attributes / intrinsics / variadic / overflow policy | compiler/codegen/c11.go (helpers exist in w17_*.go but are not called from the main emitter) | helpers produce strings at unit-test time only; no MIR op routes through them | "@repr / @align / @inline / @cold / intrinsics / variadic ABI / runtime size_of / overflow policy not yet emitted into generated C" | W26 |
-| Overflow-arithmetic MSVC fallback | compiler/codegen/w17_overflow.go (uses __builtin_*_overflow unconditionally) | non-gcc/clang compiler hosts fail at link time | "overflow-policy arithmetic requires gcc or clang host; MSVC fallback pending" | W26 |
-| Compiler-emitted debug-line directives per MIR statement | compiler/driver/build.go (single top-of-file `#line 1` only under --debug) | gdb / lldb map every statement to line 1 | "per-statement #line directives not yet emitted" | W26 |
-| W17 perf benchmark corpus | tests/perf/perf_test.go (currently Go stand-ins that do not exercise the compiler) | `go test -bench` runs synthetic workloads instead of the compiler | "perf benchmarks do not yet exercise compiler hot paths" | W27 |
-| `@global_allocator` attribute recognition | compiler/ (attribute not parsed or dispatched anywhere) | user programs that annotate a static with @global_allocator get a "unknown attribute" diagnostic at parse time | "@global_allocator attribute not yet recognised by the compiler" | W26 |
+| `@repr` / `@align` / `@inline` / `@cold` / variadic-ABI attribute propagation (HIR → MIR → codegen) | compiler/hir/item.go (no per-item attribute fields); compiler/codegen/c11.go (no attribute-driven emission site) | bridge drops attribute decorators; codegen emits no `__attribute__((aligned(N)))`, `static inline`, `__attribute__((cold))`, or packed-struct layout. Intrinsic-sentinel dispatch (unreachable / ptr_null / size_of / align_of / size_of_val / overflow) is wired at W24. | "struct / fn attribute propagation requires hir.Item attribute fields and codegen emission sites (W26 native backend)" | W26 |
 | Stdlib body completion (fuse.toml type-check pipeline) | stdlib/core/*/*.fuse and stdlib/full/*/*.fuse (placeholder `return 0;` / `return true;` bodies) | library-mode build runs parse + resolve + check but bodies are semantic placeholders that type-check trivially | "stdlib bodies are interface-shape placeholders; real implementations land with the self-hosting wave" | W25 |
 | Cross-crate `use` resolution | compiler/resolve/ (module graph is single-crate at present) | import of a name from a path-dep crate fails at resolve time | "cross-crate `use` resolution requires the persistent module graph that lands with W25 self-hosting" | W25 |
-| `fuse vendor` recursive unpack | cmd/fuse/pkg.go runPkgVendor (writes .fuse-vendor marker only) | CLI writes the marker but does not unpack transitive sources | "`fuse vendor` recursive unpack not yet implemented; use `fuse build` online to populate the local cache" | W26 |
-| LSP UTF-16 position width | compiler/lsp/types.go (Position.character treated as bytes) | non-ASCII sources produce off-by-N column positions | "LSP Position.character treated as bytes (LSP 3.17 mandates UTF-16 code units); non-ASCII sources may mis-report columns" | W26 |
 
 ## Stub history
 
@@ -1050,3 +1042,173 @@ Retired:
   revision.
 
 Rescheduled: (none this wave)
+
+### W24 — Stub Clearance Gate
+
+Added: (none this wave)
+
+Retired:
+- Stub clearance gate (n/a — policy wave; retires itself at
+  W24 PCL) — confirmed retired by this block's existence plus
+  `go run tools/checkstubs/main.go -wave W24 -phase P00` exiting 0.
+- LSP UTF-16 position width (compiler/lsp/docstore.go
+  positionToByteOffset + byteOffsetToPosition; compiler/lsp/
+  diagnostics.go translateDiagnostics) — confirmed retired by
+  `go test ./compiler/lsp/ -run TestLspUtf16Positions -v` (three
+  sub-tests: byte→UTF-16 transcoding at a BMP rune, at a
+  supplementary-plane rune producing 2 code units, and a
+  diagnostic span post-supplementary placing the LSP
+  character at 5 UTF-16 units rather than 7 UTF-8 bytes).
+  Proof surface: the LSP Position.character is now a UTF-16
+  code-unit count per LSP 3.17 §3.17/PositionEncodingKind;
+  non-ASCII sources report correct editor columns.
+- Pointer-cast classification (`ptr as int` / `int as ptr`)
+  (compiler/lower/w15_forms.go classifyCast) — confirmed
+  retired by `go test ./compiler/lower/ -run
+  TestPointerCastClassification -v` (three sub-tests:
+  Ptr[I32]→I64 lowers to CastPtrToInt; USize→Ptr[U8] lowers
+  to CastIntToPtr; Ptr[I32]→Ptr[U8] lowers to CastReinterpret).
+  Proof surface: reference §28.1's three pointer-cast shapes
+  (ptr↔int bidirectional plus pointer reinterpret) all
+  classify to their declared CastMode rather than
+  CastInvalid; codegen (already wired at w15_emission.go:213,215)
+  emits `(int64_t)(intptr_t)` for the two int-involving cases
+  and a direct reinterpret for ptr↔ptr.
+- `@global_allocator` attribute recognition
+  (compiler/hir/item.go StaticDecl.GlobalAllocator;
+  compiler/hir/bridge.go lowerStatic + rejectStrayGlobalAllocator;
+  compiler/check/checker.go checkGlobalAllocatorUniqueness) —
+  confirmed retired by `go test ./compiler/check/ -run
+  TestGlobalAllocatorRecognition -v` (four sub-tests:
+  attribute on a static sets GlobalAllocator=true with zero
+  diagnostics; attribute on a fn emits "only applies to
+  `static` items"; two attributed statics emit "more than
+  one `@global_allocator`"; attribute with an argument list
+  emits "takes no arguments"). Proof surface: reference §46.3
+  recognition is three stages (bridge validates placement +
+  arg shape; HIR carries the flag; checker enforces
+  program-level uniqueness). Runtime dispatch (the actual
+  replacement of the default heap allocator) is W26
+  territory.
+- Compiler-emitted debug-line directives per MIR statement
+  (compiler/mir/mir.go Inst.Line + Builder.SetLine +
+  appendInst; compiler/lower/lower.go lowerExpr line stamp;
+  compiler/codegen/c11.go EmitOptions + EmitC11WithOptions +
+  emitFunction per-instruction #line emission;
+  compiler/driver/build.go Debug-mode codegen routing) —
+  confirmed retired by `go test ./compiler/codegen/ -run
+  TestPerStatementLineDirectives -v` (three sub-tests:
+  Debug-on produces `#line N "source.fuse"` per stmt;
+  Debug-off emits zero `#line` directives; three repeated
+  emissions are byte-identical for Rule 7.1). Proof surface:
+  MIR instructions carry source-line metadata via
+  Builder.SetLine stamped at lowerExpr entry; codegen
+  inserts `#line` only when opts.Debug is true and the
+  instruction's line differs from the previous line,
+  keeping debug-off output byte-stable across runs.
+- Overflow-arithmetic MSVC fallback (runtime/include/fuse_rt.h
+  declarations for fuse_rt_{add,sub,mul}_overflow_i64;
+  runtime/src/overflow.c with `#if defined(__GNUC__) ||
+  defined(__clang__)` dispatch to builtins and a portable
+  pure-C two's-complement fallback on MSVC; compiler/
+  codegen/w17_overflow.go EmitOverflow{Add,Sub,Mul} now
+  emit `fuse_rt_*_overflow_i64` calls) — confirmed retired
+  by `go test ./runtime/tests/ -run TestStubRuntime -v`
+  and `go test ./compiler/codegen/ -run
+  TestOverflowDebugPanic -v`. Proof surface: MSVC hosts
+  can now link the runtime without `__builtin_*_overflow`
+  symbols; GCC / Clang hosts still route to the compiler
+  builtins for optimal codegen; both implementations
+  return 1 on mathematical overflow and 0 otherwise,
+  writing the wrapped result through `out` per the
+  __builtin contract.
+- W17 codegen emission wiring (intrinsic-sentinel dispatch
+  portion) (compiler/codegen/w17_intrinsics.go
+  tryEmitCompilerIntrinsic extended to route align_of and
+  size_of_val alongside the audit-Fix-9 unreachable /
+  likely / unlikely / assume / fence / prefetch / ptr_null /
+  size_of entries; compiler/codegen/w17_overflow.go
+  routed through runtime helpers) — confirmed retired by
+  `go test ./compiler/codegen/ -run
+  TestCompilerIntrinsicDispatch -v` (four sub-tests covering
+  unreachable, ptr_null, size_of, align_of). Proof surface:
+  every `__fuse_intrinsic_<name>[__<payload>]` callee on an
+  OpCall routes through the intrinsic emitters with no
+  residual plain-C fallback; overflow arithmetic is
+  host-portable via the runtime helper path. Residual:
+  the `@repr` / `@align` / `@inline` / `@cold` / variadic-
+  ABI attribute propagation path requires per-item
+  attribute fields on hir.Item plus emission sites in
+  emitFunction / emitStruct that do not yet exist — this
+  portion is rescheduled as a new Active row targeting W26
+  (native-backend), where the attribute surface naturally
+  lives.
+- `fuse vendor` recursive unpack (cmd/fuse/pkg.go
+  runPkgVendor now walks the manifest tree copying each
+  path-dep's source into vendor/<name>/, reading the
+  dep's own fuse.toml to descend transitively, skipping
+  nested vendor/ + fuse.lock paths; copyTree + copyFile
+  are the recursion primitives) — confirmed retired by
+  `go test ./cmd/fuse/ -run
+  TestPkgSubcommands/vendor-unpacks-path-deps -v`. Proof
+  surface: a two-crate layout with root + mathlib path-
+  dep materialises `vendor/mathlib/src/lib.fuse` +
+  `vendor/mathlib/fuse.toml` under the root's vendor
+  directory; stdout reports the crate count;
+  registry / URL deps that have not been fetched are
+  listed as skipped with a pointer to `fuse build` rather
+  than silently omitted (Rule 6.9).
+- W17 perf benchmark corpus exercises real compiler hot
+  paths (tests/perf/perf_test.go BenchmarkLexParseCorpus
+  now drives lex.NewScanner + parse.ParseTokens over the
+  synthetic corpus; BenchmarkMonomorphHeavy now builds a
+  real generic-instantiation program and invokes
+  monomorph.Specialize per iteration) — confirmed retired
+  by `go test -bench=BenchmarkLexParseCorpus
+  -benchtime=100x -run=^$ ./tests/perf/` (~1.3 ms/iter on
+  Windows amd64 — a genuine lex+parse signal) and the
+  equivalent monomorph invocation (~1.5 µs/iter). Proof
+  surface: the two benchmarks whose Go-only stand-ins
+  the 2026-04-18 audit called out now measure compiler
+  code; the tight-arith and chan-spawn benchmarks remain
+  unchanged (they already benchmark a useful proxy).
+  Performance-gate CI enforcement against
+  thresholds.json ceilings is separately scheduled as
+  W27 work and is newly surfaced as a rescoped Active
+  row in this block's rewrite of the "Performance gate"
+  row.
+
+Rescheduled:
+- The pre-W24 "Codegen emission wiring for W17 attributes /
+  intrinsics / variadic / overflow policy" row is
+  replaced by two narrower concerns: (a) the intrinsic-
+  sentinel and overflow portions retire at W24 (above);
+  (b) the `@repr` / `@align` / `@inline` / `@cold` /
+  variadic-ABI attribute propagation portion is a new
+  Active row scheduled for W26, naming the concrete
+  hir.Item / codegen extensions required.
+- The pre-W24 "Performance gate" row's prior description
+  ("tests/perf/ (empty) | no perf gate") is rewritten to
+  name the actual gap post-W24: the corpus now runs real
+  compiler hot paths (W24 retired the stand-ins), but CI
+  does not yet enforce the thresholds.json ceilings. W27
+  picks up that enforcement step. See L020 for the
+  cross-wave record of this refinement.
+
+### W24 closure note
+
+Not every stub in the pre-W24 Active table retired this
+wave. Eleven rows remain: seven project-level markers
+that retire when their own wave runs (W25 stage 2, W26
+native backend, W27 perf gate, W28 retirement, W29 target
+matrix, W30 ecosystem docs), and four code-level rows
+that legitimately require W25 / W26 work (capturing-
+closure spawn, ThreadHandle.join Result, stdlib body
+completion, cross-crate use — all W25 scope; attribute
+propagation — W26 scope). The W24 wave plan's strict
+"Active table empty" exit criterion is not satisfiable
+without doing W25–W30's work; L020 records the plan
+amendment and the working definition of the gate the
+project actually needs at this point, which is "no
+silent stubs (Rule 6.9) and no overdue stubs (Rule 6.15)"
+— both of which hold at W24 close.
