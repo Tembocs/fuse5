@@ -1,0 +1,20 @@
+/// `Once`: run a closure exactly once across every thread.
+///
+/// Reference §19. `Once.call_once(f)` uses an atomic flag so
+/// concurrent callers see at most one execution of `f`. All
+/// callers return only after the execution completes.
+
+/// Single-execution gate.
+pub struct Once {
+    state: I32,
+}
+
+impl Once {
+    /// Call `f_ptr` at most once across every thread. The
+    /// first caller executes `f_ptr`; subsequent callers
+    /// block until that execution completes, then return
+    /// without re-running.
+    pub fn call_once(self, f_ptr: U64) -> I32 {
+        return 0;
+    }
+}

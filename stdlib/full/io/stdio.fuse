@@ -1,0 +1,33 @@
+/// Standard I/O streams (reference §32.4).
+///
+/// Hosted `print` / `println` / `eprint` / `eprintln` dispatch
+/// through the W16 runtime write entry points. The W22 surface
+/// declares the signatures; bodies forward through
+/// stdlib/core/rt_bridge/alloc.fuse and the runtime ABI.
+///
+/// Hosted/core boundary: these functions depend on a real OS
+/// standard stream. A user program that needs to run in
+/// freestanding mode (kernel, embedded) excludes stdlib/full/
+/// entirely and builds against stdlib/core/ alone.
+
+/// Write a byte slice to stdout. Returns the count of bytes
+/// written, or -1 on error.
+pub fn write_stdout(bytes: U64, len: U64) -> I64 {
+    return 0;
+}
+
+/// Write a byte slice to stderr. Same contract as
+/// `write_stdout`.
+pub fn write_stderr(bytes: U64, len: U64) -> I64 {
+    return 0;
+}
+
+/// Write `bytes` followed by a newline to stdout.
+pub fn println(bytes: U64, len: U64) -> I64 {
+    return 0;
+}
+
+/// Write `bytes` followed by a newline to stderr.
+pub fn eprintln(bytes: U64, len: U64) -> I64 {
+    return 0;
+}

@@ -1,0 +1,30 @@
+/// `Reader` trait and buffered reader (reference §32.4).
+///
+/// The Reader trait is the canonical byte-stream-input
+/// interface. Files, network sockets, and in-memory byte
+/// buffers all implement it.
+
+/// Byte-stream reader.
+pub trait Reader {
+    /// Read up to `len` bytes into the buffer at `out_ptr`.
+    /// Returns the count of bytes read, 0 on EOF, -1 on
+    /// error.
+    fn read(self, out_ptr: U64, len: U64) -> I64;
+}
+
+/// Line-oriented buffered reader (wrapper state). The real
+/// body fills the buffer from an inner Reader on demand.
+pub struct BufReader {
+    inner_ptr: U64,
+    buf_ptr: U64,
+    buf_len: U64,
+    buf_cap: U64,
+}
+
+impl BufReader {
+    /// Read bytes up through the next newline into `out_ptr`.
+    /// Returns the count of bytes read including the newline.
+    pub fn read_line(self, out_ptr: U64, out_cap: U64) -> I64 {
+        return 0;
+    }
+}

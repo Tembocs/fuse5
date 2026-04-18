@@ -1,0 +1,38 @@
+/// Monotonic + wall clocks and sleep (reference §32.7).
+///
+/// `Instant` is a point on the monotonic clock; differences
+/// between instants are durations. `SystemTime` is a point on
+/// the wall-clock (subject to clock adjustments).
+
+/// Monotonic timestamp.
+pub struct Instant {
+    nanos: I64,
+}
+
+impl Instant {
+    /// Return the elapsed nanoseconds since another Instant.
+    pub fn since(self, earlier: Instant) -> I64 {
+        return 0;
+    }
+}
+
+/// Wall-clock timestamp.
+pub struct SystemTime {
+    nanos_since_epoch: I64,
+}
+
+/// Snapshot the monotonic clock.
+pub fn now_monotonic() -> I64 {
+    return 0;
+}
+
+/// Snapshot the wall clock. Returns nanoseconds since the
+/// Unix epoch.
+pub fn now_wall() -> I64 {
+    return 0;
+}
+
+/// Sleep the current thread for at least `nanos` nanoseconds.
+pub fn sleep_ns(nanos: I64) -> I64 {
+    return 0;
+}

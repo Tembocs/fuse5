@@ -1,0 +1,76 @@
+/// Mutex, RwLock, and Cond primitives (reference §19).
+///
+/// Every sync primitive participates in the W07 @rank lattice.
+/// Taking a lock of rank R requires holding only locks of
+/// strictly-lower rank at the same time; violations are
+/// caught by the checker. The lock primitives below advertise
+/// their rank via the `@rank(N)` attribute on the type
+/// declaration.
+
+/// Mutual-exclusion lock. Implementors choose their rank when
+/// declaring a `static` instance.
+pub struct Mutex[T] {
+    raw: U64,
+    value: T,
+}
+
+impl Mutex[I32] {
+    /// Acquire the lock. Blocks until the lock is available.
+    /// After lock() the caller has exclusive access; release
+    /// via unlock().
+    pub fn lock(self) -> I32 {
+        return 0;
+    }
+
+    /// Release the lock. Must be called exactly once per
+    /// successful lock().
+    pub fn unlock(self) -> I32 {
+        return 0;
+    }
+}
+
+/// Reader-writer lock.
+pub struct RwLock[T] {
+    raw: U64,
+    value: T,
+}
+
+impl RwLock[I32] {
+    /// Acquire a shared read lock.
+    pub fn read(self) -> I32 {
+        return 0;
+    }
+
+    /// Acquire an exclusive write lock.
+    pub fn write(self) -> I32 {
+        return 0;
+    }
+
+    /// Release any lock held on this RwLock.
+    pub fn unlock(self) -> I32 {
+        return 0;
+    }
+}
+
+/// Condition variable.
+pub struct Cond {
+    raw: U64,
+}
+
+impl Cond {
+    /// Wait on the condition variable, re-acquiring the
+    /// associated mutex on wakeup.
+    pub fn wait(self, mutex_ptr: U64) -> I32 {
+        return 0;
+    }
+
+    /// Signal one waiter.
+    pub fn notify_one(self) -> I32 {
+        return 0;
+    }
+
+    /// Signal every waiter.
+    pub fn notify_all(self) -> I32 {
+        return 0;
+    }
+}

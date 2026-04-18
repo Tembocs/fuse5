@@ -1,0 +1,29 @@
+/// `Shared[T]`: shared-ownership pointer with atomic refcount
+/// (reference §19).
+///
+/// Shared is a reference-counted heap pointer — `Shared.clone`
+/// increments the count; `Shared.drop` decrements. When the
+/// count reaches zero the value is freed. Shared is `Send` +
+/// `Sync` when T is Send + Sync; otherwise it is local-only.
+
+/// Atomic-refcounted heap pointer.
+pub struct Shared[T] {
+    raw: U64,
+}
+
+impl Shared[I32] {
+    /// Clone the pointer, incrementing the refcount.
+    pub fn clone(self) -> I32 {
+        return 0;
+    }
+
+    /// Decrement the refcount; when zero, free the value.
+    pub fn drop(self) -> I32 {
+        return 0;
+    }
+
+    /// Read the pointed-to value (read-only access).
+    pub fn get(self) -> I32 {
+        return 0;
+    }
+}

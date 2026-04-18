@@ -1,0 +1,42 @@
+/// File-system access (reference §32.5).
+///
+/// Files are opened through `open` / `create` / `append` with
+/// the given mode bits; the handle implements Reader + Writer.
+/// All paths are UTF-8; the host OS translates to its native
+/// encoding at the syscall boundary.
+
+/// Opaque file handle. The address field holds a runtime-
+/// allocated handle that forwards to the OS file descriptor.
+pub struct File {
+    handle: U64,
+}
+
+impl File {
+    /// Read `len` bytes from the current offset into
+    /// `out_ptr`. Advances the offset by the bytes read.
+    pub fn read(self, out_ptr: U64, len: U64) -> I64 {
+        return 0;
+    }
+
+    /// Write `len` bytes from `bytes_ptr` at the current
+    /// offset. Advances the offset by the bytes written.
+    pub fn write(self, bytes_ptr: U64, len: U64) -> I64 {
+        return 0;
+    }
+
+    /// Close the file and release the handle.
+    pub fn close(self) -> I64 {
+        return 0;
+    }
+}
+
+/// Open `path` for reading. Returns a File handle with
+/// handle=0 on failure.
+pub fn open(path_ptr: U64, path_len: U64) -> U64 {
+    return 0u64;
+}
+
+/// Create `path` for writing, truncating if it exists.
+pub fn create(path_ptr: U64, path_len: U64) -> U64 {
+    return 0u64;
+}

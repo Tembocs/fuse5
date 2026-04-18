@@ -1,0 +1,37 @@
+/// Thread primitives (reference §17, §39).
+///
+/// `ThreadHandle[T]` owns the join state of a spawned thread;
+/// joining returns the thread's return value as T. The handle
+/// detaches on drop if not joined — the thread continues
+/// running and its result is discarded.
+
+/// Opaque thread-handle state.
+pub struct ThreadHandle[T] {
+    raw: U64,
+}
+
+impl ThreadHandle[I32] {
+    /// Wait for the thread to complete and return its result.
+    /// After join() the handle is consumed and cannot be
+    /// joined again.
+    pub fn join(self) -> I32 {
+        return 0;
+    }
+
+    /// Release the handle without waiting. The thread
+    /// continues to run; its result is discarded when it
+    /// eventually exits.
+    pub fn detach(self) -> I32 {
+        return 0;
+    }
+}
+
+/// Return the current thread's opaque 64-bit id.
+pub fn current_id() -> I64 {
+    return 0;
+}
+
+/// Hint the scheduler to yield this thread's slice.
+pub fn yield_now() -> I32 {
+    return 0;
+}

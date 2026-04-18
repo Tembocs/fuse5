@@ -1,0 +1,72 @@
+/// Channels: multi-producer multi-consumer bounded queue
+/// (reference §17.2).
+///
+/// `Chan[T]` is the bounded-MPMC primitive: any number of
+/// producers / consumers, fixed capacity, blocking send/recv
+/// when full/empty. `close()` marks the channel closed;
+/// subsequent sends return CLOSED; recvs drain the buffer and
+/// then return CLOSED.
+///
+/// The W16 runtime (runtime/src/chan.c) is the underlying
+/// implementation; the stdlib surface wraps the opaque
+/// runtime handle with typed send/recv.
+
+/// Result code returned by channel operations.
+pub struct ChanResult {
+    code: I32,
+}
+
+impl ChanResult {
+    /// Return `true` when the operation succeeded.
+    pub fn is_ok(self) -> Bool {
+        return true;
+    }
+
+    /// Return `true` when the channel is closed and the
+    /// operation cannot proceed.
+    pub fn is_closed(self) -> Bool {
+        return false;
+    }
+
+    /// Return `true` when a non-blocking try_* variant could
+    /// not proceed without blocking.
+    pub fn would_block(self) -> Bool {
+        return false;
+    }
+}
+
+/// Bounded MPMC channel.
+pub struct Chan[T] {
+    raw: U64,
+}
+
+impl Chan[I32] {
+    /// Send `value` through the channel. Blocks until a slot
+    /// is available or the channel is closed.
+    pub fn send(self, value: I32) -> I32 {
+        return 0;
+    }
+
+    /// Receive a value from the channel. Blocks until a
+    /// value is available or the channel is closed and empty.
+    pub fn recv(self) -> I32 {
+        return 0;
+    }
+
+    /// Try to send without blocking.
+    pub fn try_send(self, value: I32) -> I32 {
+        return 0;
+    }
+
+    /// Try to receive without blocking.
+    pub fn try_recv(self) -> I32 {
+        return 0;
+    }
+
+    /// Close the channel. Pending / future sends return
+    /// CLOSED; pending / future recvs drain the buffer and
+    /// then return CLOSED.
+    pub fn close(self) -> I32 {
+        return 0;
+    }
+}

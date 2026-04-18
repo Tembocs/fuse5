@@ -1,0 +1,32 @@
+/// `Writer` trait and buffered writer (reference §32.4).
+
+/// Byte-stream writer.
+pub trait Writer {
+    /// Write `len` bytes from `bytes_ptr`. Returns the count
+    /// of bytes written, or -1 on error.
+    fn write(self, bytes_ptr: U64, len: U64) -> I64;
+
+    /// Flush any buffered bytes.
+    fn flush(self) -> I64;
+}
+
+/// Buffered writer that accumulates writes and flushes in
+/// larger chunks.
+pub struct BufWriter {
+    inner_ptr: U64,
+    buf_ptr: U64,
+    buf_len: U64,
+    buf_cap: U64,
+}
+
+impl BufWriter {
+    /// Write `len` bytes through the buffered path.
+    pub fn write(self, bytes_ptr: U64, len: U64) -> I64 {
+        return 0;
+    }
+
+    /// Flush the internal buffer to the wrapped writer.
+    pub fn flush(self) -> I64 {
+        return 0;
+    }
+}

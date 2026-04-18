@@ -1,0 +1,30 @@
+/// Directory operations (reference §32.5).
+
+/// Directory-iteration handle.
+pub struct DirIter {
+    handle: U64,
+}
+
+impl DirIter {
+    /// Return the next directory entry's name, or 0-length
+    /// when the iteration is exhausted.
+    pub fn next(self) -> U64 {
+        return 0u64;
+    }
+}
+
+/// Create `path` as a directory.
+pub fn create_dir(path_ptr: U64, path_len: U64) -> I64 {
+    return 0;
+}
+
+/// Remove `path`. Fails if the path is a non-empty directory
+/// or does not exist.
+pub fn remove(path_ptr: U64, path_len: U64) -> I64 {
+    return 0;
+}
+
+/// Open `path` for directory iteration.
+pub fn read_dir(path_ptr: U64, path_len: U64) -> U64 {
+    return 0u64;
+}

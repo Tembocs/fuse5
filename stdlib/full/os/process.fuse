@@ -1,0 +1,18 @@
+/// Process-level OS facilities (reference §32.6).
+
+/// Return the current process id.
+pub fn pid() -> I64 {
+    return 0;
+}
+
+/// Terminate the process with the given exit code. Does not
+/// run destructors; use sparingly.
+pub fn exit(code: I32) -> I32 {
+    return code;
+}
+
+/// Abort the process after writing `msg_ptr[0..len]` to
+/// stderr. Equivalent to `fuse_rt_panic` in the runtime ABI.
+pub fn abort_with(msg_ptr: U64, len: U64) -> I32 {
+    return 0;
+}
