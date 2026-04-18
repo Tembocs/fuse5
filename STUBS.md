@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Stdlib hosted (IO, fs, os, time, thread, sync, channels, network) | stdlib/full/ (empty) | no hosted stdlib | "stdlib hosted not yet implemented" | W22 |
 | Package management (manifest, lockfile, resolver, fetcher, registry protocol) | compiler/ (not yet created pkg/) | no package manager | "package manager not yet implemented" | W23 |
 | Stub clearance gate | n/a — gating wave | clearance happens at wave entry | n/a — policy wave | W24 |
 | Stage 2 self-hosting | stage2/src/ (empty) | no stage2 compiler | "stage 2 compiler not yet ported" | W25 |
@@ -928,5 +927,49 @@ Retired:
   the current parser + lowerer pipeline; body
   completion lands with W22 stdlib-hosted once the
   parser's turbofish-aware struct-lit path lands.
+
+Rescheduled: (none this wave)
+
+### W22 — Stdlib Hosted
+
+Added: (none this wave)
+
+Retired:
+- Stdlib hosted (IO, fs, os, time, thread, sync, channels,
+  network) (stdlib/full/ tree of 13 Fuse source files across
+  io/ {stdio, reader, writer}, fs/ {file, dir}, os/
+  {process, env}, time/ {instant}, thread/ {thread —
+  ThreadHandle[T] with join / detach / current_id /
+  yield_now}, sync/ {mutex — Mutex[T] / RwLock[T] / Cond,
+  once — Once.call_once, shared — Shared[T] atomic
+  refcount}, chan/ {chan — Chan[T] MPMC + ChanResult};
+  tests/stdlib/hosted_test.go with TestHostedStdlib
+  {subdirs + parse + Rule 5.6 + core/hosted boundary
+  invariant via non-comment import scan} and TestConcurrency
+  {ThreadHandle surface + sync primitives + channel
+  surface}) — confirmed retired by `fuse build
+  stdlib/full/...` returning "13 files ok (lib mode)",
+  `fuse doc --check stdlib/full` exiting 0, and Go tests
+  TestHostedStdlib + TestConcurrency (3 sub-tests) all
+  green. Proof surface: every wave-doc-required subdirectory
+  exists and carries at least one .fuse file with Rule 5.6
+  doc coverage; thread.fuse declares `pub struct
+  ThreadHandle[T]` with all four mandated methods;
+  mutex.fuse declares Mutex[T] / RwLock[T] / Cond with
+  every lock/unlock/read/write/wait/notify method; once.fuse
+  declares Once.call_once; shared.fuse declares Shared[T]
+  atomic refcount; chan.fuse declares Chan[T] and
+  ChanResult with every send/recv/try variant plus
+  is_ok/is_closed/would_block probes; the core/hosted
+  boundary invariant (reference §W20) is locked by the
+  TestHostedStdlib leak check which strips /// doc-comment
+  lines and then scans stdlib/core for any
+  `use stdlib::full` / `use stdlib.full` / `import
+  stdlib/full` / `stdlib::full::` qualified-path pattern.
+  Runtime-observable concurrency behaviour was proven
+  end-to-end at W16 (TestSpawnObservable +
+  TestChannelRoundTrip); W22 layers typed Fuse-level
+  wrappers on top of that runtime ABI without changing
+  the underlying contract.
 
 Rescheduled: (none this wave)
