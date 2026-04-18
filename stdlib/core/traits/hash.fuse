@@ -1,0 +1,22 @@
+/// Hash and Hasher: structural hashing for collection keys.
+///
+/// Reference §24. Types that implement Hash can be used as keys
+/// in Map[K, V] and Set[T]. Implementors call into a Hasher
+/// instance, which accumulates the hash state.
+
+/// Accumulator for hash bytes. Implementations produce a 64-bit
+/// hash when `finish` is called.
+pub trait Hasher {
+    /// Feed a slice of bytes into the hash.
+    fn write(self, bytes: U64);
+
+    /// Produce the final 64-bit hash digest.
+    fn finish(self) -> U64;
+}
+
+/// Structural hashing. Every type that can be a Map key
+/// implements Hash. Primitive types have intrinsic impls.
+pub trait Hash {
+    /// Hash `self` into the provided hasher state.
+    fn hash(self, hasher: Hasher);
+}

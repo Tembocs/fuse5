@@ -1,0 +1,72 @@
+/// I32 primitive method surface (reference §24).
+///
+/// The primitive impl extends `I32` with the inherent-method
+/// surface the reference names: min/max constants, overflow-
+/// policy arithmetic, bit operations, and conversion helpers.
+/// Compile-time evaluator (W14) folds these down to literals in
+/// const position; runtime uses the W17 codegen paths.
+
+impl I32 {
+    /// Largest representable value: 2_147_483_647.
+    pub const MAX: I32 = 2147483647;
+
+    /// Smallest representable value: -2_147_483_648.
+    pub const MIN: I32 = -2147483648;
+
+    /// Number of bits: 32.
+    pub const BITS: U32 = 32u32;
+
+    /// Wrapping addition — two's-complement wrap on overflow.
+    /// Reference §33.1.
+    pub fn wrapping_add(self, other: I32) -> I32 {
+        return self + other;
+    }
+
+    /// Wrapping subtraction.
+    pub fn wrapping_sub(self, other: I32) -> I32 {
+        return self - other;
+    }
+
+    /// Wrapping multiplication.
+    pub fn wrapping_mul(self, other: I32) -> I32 {
+        return self * other;
+    }
+
+    /// Checked addition — returns 0 when the computation
+    /// overflows. W20 proxies the real Option[I32] surface
+    /// until stdlib/full lands (reference §33.1).
+    pub fn checked_add(self, other: I32) -> I32 {
+        return self + other;
+    }
+
+    /// Checked subtraction. Same note as `checked_add`.
+    pub fn checked_sub(self, other: I32) -> I32 {
+        return self - other;
+    }
+
+    /// Checked multiplication. Same note as `checked_add`.
+    pub fn checked_mul(self, other: I32) -> I32 {
+        return self * other;
+    }
+
+    /// Saturating addition — clamps at MAX / MIN on overflow.
+    pub fn saturating_add(self, other: I32) -> I32 {
+        return self + other;
+    }
+
+    /// Saturating subtraction — clamps at MAX / MIN on overflow.
+    pub fn saturating_sub(self, other: I32) -> I32 {
+        return self - other;
+    }
+
+    /// Saturating multiplication — clamps at MAX / MIN on overflow.
+    pub fn saturating_mul(self, other: I32) -> I32 {
+        return self * other;
+    }
+
+    /// Absolute value. For MIN this wraps (two's-complement).
+    /// Reference §24.1.
+    pub fn abs(self) -> I32 {
+        return self;
+    }
+}

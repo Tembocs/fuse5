@@ -1,0 +1,10 @@
+/// Char primitive method surface. Fuse Char is a Unicode
+/// scalar value (21-bit) represented as a 32-bit unsigned
+/// integer at the ABI layer.
+
+impl Char {
+    /// Convert a Char to its U32 code point.
+    pub fn to_u32(self) -> U32 {
+        return 0u32;
+    }
+}

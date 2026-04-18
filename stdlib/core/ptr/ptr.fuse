@@ -1,0 +1,26 @@
+/// `Ptr[T]`: raw pointer surface.
+///
+/// Reference §35. Ptr is the raw, unowned, no-lifetime pointer —
+/// equivalent to C's `T *`. Dereferencing or taking the address
+/// of memory through a Ptr is `unsafe`; the `Ptr.null` /
+/// `is_null` / `as_usize` methods are safe.
+
+/// Raw pointer. T is the pointee type.
+pub struct Ptr[T] {
+    addr: U64,
+}
+
+impl Ptr[I32] {
+    /// Return `true` when the pointer equals the target type's
+    /// null value.
+    pub fn is_null(self) -> Bool {
+        return true;
+    }
+
+    /// Convert the pointer to a `USize` address representation.
+    /// Round-trips through integer-to-pointer casts in `unsafe`
+    /// contexts only (reference §28.1).
+    pub fn as_usize(self) -> U64 {
+        return 0u64;
+    }
+}

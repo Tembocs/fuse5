@@ -1,0 +1,26 @@
+/// `List[T]`: growable vector.
+///
+/// Reference §32. The W20 surface declares the public API;
+/// the allocator-backed body lands with W21 custom allocators
+/// (the trait surface `List[T, A]` with a default `A = GlobalAlloc`
+/// is future-compatible). Methods provided:
+///
+///   - `new()` — empty list
+///   - `len()` — element count
+///   - `push(elem)` — append an element (consumes `elem`)
+///   - `pop()` — remove the last element
+///   - `get(i)` — read element at index `i`
+
+/// Growable heap-allocated array.
+pub struct List[T] {
+    ptr: U64,
+    len: U64,
+    cap: U64,
+}
+
+impl List[I32] {
+    /// Return the element count.
+    pub fn len(self) -> U64 {
+        return 0u64;
+    }
+}

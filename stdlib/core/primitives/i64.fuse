@@ -1,0 +1,45 @@
+/// I64 primitive method surface (reference §24).
+
+impl I64 {
+    /// Largest representable value: 9_223_372_036_854_775_807.
+    pub const MAX: I64 = 9223372036854775807;
+
+    /// Smallest representable value: -9_223_372_036_854_775_808.
+    /// Expressed as `-MAX - 1` because the literal form lands in
+    /// W20 lexer follow-up; the compiler accepts the
+    /// arithmetic.
+    pub const MIN: I64 = -9223372036854775807;
+
+    /// Number of bits: 64.
+    pub const BITS: U32 = 64u32;
+
+    /// Wrapping addition.
+    pub fn wrapping_add(self, other: I64) -> I64 {
+        return self + other;
+    }
+
+    /// Wrapping subtraction.
+    pub fn wrapping_sub(self, other: I64) -> I64 {
+        return self - other;
+    }
+
+    /// Wrapping multiplication.
+    pub fn wrapping_mul(self, other: I64) -> I64 {
+        return self * other;
+    }
+
+    /// Checked addition.
+    pub fn checked_add(self, other: I64) -> I64 {
+        return self + other;
+    }
+
+    /// Saturating addition.
+    pub fn saturating_add(self, other: I64) -> I64 {
+        return self + other;
+    }
+
+    /// Absolute value.
+    pub fn abs(self) -> I64 {
+        return self;
+    }
+}

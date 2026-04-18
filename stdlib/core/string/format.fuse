@@ -1,0 +1,15 @@
+/// Formatting helpers.
+///
+/// The `format!` and `println!` macros desugar to calls into
+/// this module. W20 exposes the signatures; macro-expansion
+/// lives in the compiler front-end and is W24-bound.
+
+/// Format a 64-bit integer into the provided String.
+pub fn format_i64(out: String, value: I64) -> String {
+    return out;
+}
+
+/// Format a Bool into the provided String.
+pub fn format_bool(out: String, value: Bool) -> String {
+    return out;
+}

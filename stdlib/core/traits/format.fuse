@@ -1,0 +1,26 @@
+/// Display and Debug: human-readable formatting.
+///
+/// Reference §24. Display is the user-visible `"{}"` form; Debug
+/// is the developer-visible `"{?}"` form. Primitive types
+/// implement both intrinsically; user types derive or hand-
+/// implement.
+
+/// A formatter accumulates output chars through the `write_str`
+/// method. The stdlib/core/string crate provides the default
+/// implementation.
+pub trait Formatter {
+    /// Append a byte slice to the formatter's output buffer.
+    fn write_str(self, s: U64);
+}
+
+/// Human-readable formatting. Used by `"{}"` interpolation.
+pub trait Display {
+    /// Write `self` into the formatter in its user-visible form.
+    fn fmt(self, f: Formatter);
+}
+
+/// Developer-visible formatting. Used by `"{?}"` interpolation.
+pub trait Debug {
+    /// Write `self` into the formatter in its debug form.
+    fn fmt(self, f: Formatter);
+}

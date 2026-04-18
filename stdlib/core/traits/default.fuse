@@ -1,0 +1,12 @@
+/// Default: the "zero value" trait.
+///
+/// Reference §24. A type's Default impl produces the canonical
+/// zero / empty / identity value. Primitive integers default to
+/// 0, Bool to false, String to the empty string, List[T] to an
+/// empty list, and so on.
+
+/// Default-value constructor.
+pub trait Default {
+    /// Return the canonical default of `Self`.
+    fn default() -> Self;
+}

@@ -1,0 +1,42 @@
+/// Runtime-bridge declarations for thread / channelnel primitives.
+///
+/// Reference §17. These wrap the W16 runtime entry points
+/// declared in runtime/include/fuse_rt.h so that user code
+/// can name them through `core::rt_bridge::*` rather than
+/// pattern-matching against the mangled C ABI.
+
+/// Spawn a new thread whose entry is the named fn-pointer
+/// target `entry_ptr` with `arg` passed through. Returns the
+/// opaque ThreadHandle address.
+pub fn rt_thread_spawn(entry_ptr: U64, arg: U64) -> U64 {
+    return 0u64;
+}
+
+/// Wait for the thread identified by `handle` and return its
+/// int64 result.
+pub fn rt_thread_join(handle: U64) -> I64 {
+    return 0;
+}
+
+/// Allocate a new channelnel with `capacity` slots of `elem_bytes`
+/// element size. Returns the opaque channelnel address.
+pub fn rt_channel_new(capacity: I64, elem_bytes: I64) -> U64 {
+    return 0u64;
+}
+
+/// Send `value` through the channelnel. Returns 0 on success, a
+/// non-zero channelnel-result code otherwise.
+pub fn rt_channel_send(channel: U64, value_ptr: U64) -> I32 {
+    return 0;
+}
+
+/// Receive into `out`. Returns 0 on success, a non-zero
+/// channelnel-result code otherwise.
+pub fn rt_channel_recv(channel: U64, out_ptr: U64) -> I32 {
+    return 0;
+}
+
+/// Close the channelnel.
+pub fn rt_channel_close(channel: U64) {
+    return;
+}

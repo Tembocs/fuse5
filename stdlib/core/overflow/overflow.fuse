@@ -1,0 +1,32 @@
+/// Overflow-policy arithmetic — free-function surface.
+///
+/// Reference §33.1. The per-type inherent methods on I32 / I64 /
+/// U32 / U64 (see stdlib/core/primitives/*.fuse) are the primary
+/// surface; these free functions are a convenience for generic
+/// code that takes any integer via a constraint trait.
+
+/// Wrapping addition. Two's-complement wrap on overflow.
+pub fn wrapping_add_i32(a: I32, b: I32) -> I32 {
+    return a + b;
+}
+
+/// Wrapping subtraction.
+pub fn wrapping_sub_i32(a: I32, b: I32) -> I32 {
+    return a - b;
+}
+
+/// Wrapping multiplication.
+pub fn wrapping_mul_i32(a: I32, b: I32) -> I32 {
+    return a * b;
+}
+
+/// Checked addition — proxy for the Option[I32]-returning
+/// signature the full stdlib ships.
+pub fn checked_add_i32(a: I32, b: I32) -> I32 {
+    return a + b;
+}
+
+/// Saturating addition — clamps at MAX / MIN.
+pub fn saturating_add_i32(a: I32, b: I32) -> I32 {
+    return a + b;
+}

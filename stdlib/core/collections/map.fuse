@@ -1,0 +1,19 @@
+/// `Map[K, V]`: key-value table.
+///
+/// Reference §32. K must implement `Hash` + `Eq`; W20 ships
+/// the surface and the W22 stdlib-hosted implementation fills
+/// in the body.
+
+/// Hash map with separate-chaining collision resolution.
+pub struct Map[K, V] {
+    ptr: U64,
+    len: U64,
+    cap: U64,
+}
+
+impl Map[I32, I32] {
+    /// Return the entry count.
+    pub fn len(self) -> U64 {
+        return 0u64;
+    }
+}

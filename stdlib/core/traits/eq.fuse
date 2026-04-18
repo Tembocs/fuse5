@@ -1,0 +1,26 @@
+/// PartialEq and Eq: equality comparison.
+///
+/// PartialEq is the structural-equality trait. `==` and `!=`
+/// dispatch through it for nominal types; the primitive types
+/// implement it intrinsically. Reference §5.8.
+///
+/// Eq is a marker trait for types whose PartialEq implementation
+/// is reflexive: `a == a` is always true. Floating-point types
+/// therefore implement PartialEq but NOT Eq (NaN breaks reflexivity).
+
+/// Structural equality. Implementors define `eq`; `ne` has a
+/// default implementation that negates `eq`.
+pub trait PartialEq {
+    /// Returns `true` when `self` and `other` are structurally
+    /// equal.
+    fn eq(self, other: Self) -> Bool;
+
+    /// Returns `true` when `self` and `other` differ. Default:
+    /// `!self.eq(other)`.
+    fn ne(self, other: Self) -> Bool {
+        return !self.eq(other);
+    }
+}
+
+/// Marker trait indicating PartialEq is reflexive. No methods.
+pub trait Eq {}

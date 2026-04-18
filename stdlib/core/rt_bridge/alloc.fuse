@@ -1,0 +1,22 @@
+/// Runtime-bridge declarations for the allocator surface.
+///
+/// Reference §21. At W20 core exposes only the default allocator
+/// signatures. The W21 Allocators wave generalises these to an
+/// `Allocator` trait parameterised over collections.
+
+/// Allocate `bytes` of aligned storage. Returns 0 on failure.
+pub fn rt_alloc(bytes: U64, align: U64) -> U64 {
+    return 0u64;
+}
+
+/// Reallocate an existing allocation to `new_bytes`. Returns
+/// the new base address, or 0 on failure.
+pub fn rt_realloc(ptr: U64, old_bytes: U64, new_bytes: U64, align: U64) -> U64 {
+    return 0u64;
+}
+
+/// Release an allocation previously returned by `rt_alloc` or
+/// `rt_realloc`.
+pub fn rt_free(ptr: U64, bytes: U64, align: U64) {
+    return;
+}

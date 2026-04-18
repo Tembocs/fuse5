@@ -1,0 +1,34 @@
+/// Marker traits: re-exports of the compiler's intrinsic marker
+/// traits so user code can refer to them via `core::marker::*`.
+///
+/// These types are not defined here — they are compiler-built-in
+/// (reference §55 — auto-impl for primitives, Chan, ThreadHandle).
+/// The aliases below are a surface convenience so user code can
+/// say `core::marker::Send` rather than relying on lexical scope.
+
+/// Re-export of the intrinsic `Send` marker. A type is Send when
+/// it can be transferred across a thread boundary. Reference
+/// §13.4.
+pub trait Send {}
+
+/// Re-export of the intrinsic `Sync` marker. A type is Sync when
+/// a shared reference `&T` is Send. Reference §13.4.
+pub trait Sync {}
+
+/// Re-export of the intrinsic `Copy` marker. Copy types have
+/// trivial bitwise duplication; assignment does not move.
+/// Reference §13.3.
+pub trait Copy {}
+
+/// Re-export of the intrinsic `Fn` callable trait. Types with
+/// Fn can be invoked via `f(args...)` without consuming `self`.
+/// Reference §55.
+pub trait Fn {}
+
+/// Re-export of the intrinsic `FnMut` callable trait. Invoking
+/// `f(args...)` requires a mutable receiver.
+pub trait FnMut {}
+
+/// Re-export of the intrinsic `FnOnce` callable trait. Invoking
+/// `f(args...)` consumes `self`.
+pub trait FnOnce {}

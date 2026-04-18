@@ -1,0 +1,25 @@
+/// Iterator trait and combinators.
+///
+/// Reference §32. W20 declares the Iterator trait plus the
+/// common combinator signatures. The for-loop desugar
+/// `for x in iter { ... }` routes through this trait.
+
+/// Iteration protocol: `next` yields the next element or
+/// signals end-of-stream via an Option-shaped return. At W20
+/// Option is not yet defined as an enum-with-payload; the
+/// proxy signature returns a sentinel `has_next` bool and the
+/// caller reads `item` separately. This shape survives when
+/// the full Option surface lands (W22) because the body is
+/// stubbed — only the trait signature is load-bearing.
+pub trait Iterator {
+    /// Returns `true` when the iterator can yield another item.
+    fn has_next(self) -> Bool;
+}
+
+/// Size hint. Default implementation returns zero.
+pub trait SizeHint {
+    /// Return a lower bound on the remaining item count.
+    fn size_hint(self) -> U64 {
+        return 0u64;
+    }
+}

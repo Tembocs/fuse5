@@ -1,0 +1,35 @@
+/// `RefCell[T]`: dynamically-checked interior mutability.
+///
+/// Reference §51.1. RefCell maintains a runtime borrow count
+/// and enforces Rust-style borrow rules at runtime: any
+/// number of concurrent shared borrows OR exactly one
+/// mutable borrow, never both. Violations panic via
+/// `fuse_rt_panic`.
+
+/// Runtime-borrow-tracked interior mutability.
+pub struct RefCell[T] {
+    value: T,
+    /// Borrow tracker:
+    ///   0          → no outstanding borrows
+    ///   positive N → N outstanding shared borrows
+    ///   -1         → one outstanding mutable borrow
+    borrow_count: I32,
+}
+
+impl RefCell[I32] {
+    /// Borrow immutably. Panics if a mutable borrow is
+    /// outstanding.
+    pub fn borrow(self) -> I32 {
+        return 0;
+    }
+
+    /// Borrow mutably. Panics if any borrow is outstanding.
+    pub fn borrow_mut(self) -> I32 {
+        return 0;
+    }
+
+    /// Drop one shared borrow.
+    pub fn release(self) -> I32 {
+        return 0;
+    }
+}

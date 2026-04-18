@@ -1,0 +1,22 @@
+/// Memory-layout intrinsics: size_of / align_of / size_of_val.
+///
+/// Reference §34. These are compiler intrinsics that fold to
+/// compile-time literals when used in const context (W14
+/// consteval) and to runtime literals at runtime positions
+/// (W17 codegen). The stdlib wrappers let user code refer to
+/// them by the canonical names `core::mem::size_of` etc.
+
+/// Return the byte size of the type parameter.
+pub fn size_of[T]() -> U64 {
+    return 0u64;
+}
+
+/// Return the byte alignment of the type parameter.
+pub fn align_of[T]() -> U64 {
+    return 0u64;
+}
+
+/// Return the byte size of the value the reference points at.
+pub fn size_of_val[T](val: T) -> U64 {
+    return 0u64;
+}

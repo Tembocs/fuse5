@@ -139,6 +139,15 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "fuse build: missing source file")
 		return 2
 	}
+	// W20 library-mode: `fuse build DIR/...` walks the directory
+	// for every .fuse file and runs parse-only validation. This is
+	// the stdlib-core proof path — `fuse build stdlib/core/...`
+	// succeeds when every stdlib file parses cleanly. Full
+	// codegen for a library graph lands with W23 package
+	// management.
+	if strings.HasSuffix(srcPath, "/...") || strings.HasSuffix(srcPath, `\...`) {
+		return runBuildLib(srcPath, stdout, stderr, asJSON)
+	}
 	result, diags, err := driver.Build(driver.BuildOptions{
 		Source: srcPath,
 		Output: outPath,
@@ -151,6 +160,59 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "fuse: wrote %s\n", result.BinaryPath)
+	return 0
+}
+
+// runBuildLib handles the `DIR/...` library-mode pattern. Walks
+// every .fuse file under DIR, parses each, and reports the first
+// failure (or success with a count). Output is deterministic —
+// files are visited in lexicographic order.
+func runBuildLib(pattern string, stdout, stderr io.Writer, asJSON bool) int {
+	root := strings.TrimSuffix(strings.TrimSuffix(pattern, "/..."), `\...`)
+	if root == "" {
+		root = "."
+	}
+	var files []string
+	err := filepath.Walk(root, func(p string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(p, ".fuse") {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "fuse build: walk %s: %v\n", root, err)
+		return 1
+	}
+	if len(files) == 0 {
+		fmt.Fprintf(stderr, "fuse build: no .fuse files under %s\n", root)
+		return 1
+	}
+	failures := 0
+	for _, path := range files {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(stderr, "fuse build: %v\n", err)
+			failures++
+			continue
+		}
+		_, diags := parse.Parse(path, src)
+		if len(diags) != 0 {
+			failures++
+			printDiags(stderr, diags, asJSON)
+			fmt.Fprintf(stderr, "fuse build: %s FAILED\n", path)
+		}
+	}
+	if failures != 0 {
+		fmt.Fprintf(stderr, "fuse build: %d/%d files failed\n", failures, len(files))
+		return 1
+	}
+	fmt.Fprintf(stdout, "fuse: %d files ok (lib mode)\n", len(files))
 	return 0
 }
 
@@ -347,33 +409,78 @@ func runDoc(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "fuse doc: missing source file")
 		return 2
 	}
-	src, err := os.ReadFile(srcPath)
+
+	// Resolve the target into the list of files to process. A
+	// directory expands to every .fuse file under it (recursive);
+	// a single file is processed as-is. W20 stdlib-core docs
+	// coverage relies on the directory form.
+	files, err := collectFuseFiles(srcPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "fuse doc: %v\n", err)
 		return 1
 	}
-	items := doc.Extract(src)
-	for _, it := range items {
-		vis := "priv"
-		if it.IsPub {
-			vis = "pub "
-		}
-		docSummary := it.Doc
-		if idx := strings.IndexByte(docSummary, '\n'); idx >= 0 {
-			docSummary = docSummary[:idx]
-		}
-		fmt.Fprintf(stdout, "%s %s %s:%d  %s\n", vis, it.Kind, it.Name, it.Line, docSummary)
+	if len(files) == 0 {
+		fmt.Fprintf(stderr, "fuse doc: no .fuse files at %s\n", srcPath)
+		return 1
 	}
-	if checkOnly {
-		missing := doc.CheckMissingDocs(items)
-		if len(missing) > 0 {
-			for _, m := range missing {
-				fmt.Fprintf(stderr, "missing doc: %s\n", m)
-			}
+	anyMissing := false
+	for _, path := range files {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(stderr, "fuse doc: %v\n", err)
 			return 1
 		}
+		items := doc.Extract(src)
+		for _, it := range items {
+			vis := "priv"
+			if it.IsPub {
+				vis = "pub "
+			}
+			docSummary := it.Doc
+			if idx := strings.IndexByte(docSummary, '\n'); idx >= 0 {
+				docSummary = docSummary[:idx]
+			}
+			fmt.Fprintf(stdout, "%s %s %s %s:%d  %s\n", path, vis, it.Kind, it.Name, it.Line, docSummary)
+		}
+		if checkOnly {
+			missing := doc.CheckMissingDocs(items)
+			for _, m := range missing {
+				fmt.Fprintf(stderr, "%s: missing doc: %s\n", path, m)
+				anyMissing = true
+			}
+		}
+	}
+	if checkOnly && anyMissing {
+		return 1
 	}
 	return 0
+}
+
+// collectFuseFiles returns every .fuse file at `path`. If path is
+// a directory it's walked recursively; otherwise the single file
+// is returned.
+func collectFuseFiles(path string) ([]string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return []string{path}, nil
+	}
+	var out []string
+	err = filepath.Walk(path, func(p string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(p, ".fuse") {
+			out = append(out, p)
+		}
+		return nil
+	})
+	return out, err
 }
 
 // runRepl runs the interactive read-eval-print loop. Exits 0 on

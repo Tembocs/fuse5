@@ -1,0 +1,25 @@
+/// `Cell[T]`: interior mutability for Copy types.
+///
+/// Reference §51.1. A Cell wraps a value of a Copy type and
+/// permits mutation through a shared reference. Cell[T] is
+/// explicitly `!Send` and `!Sync` so the runtime borrow
+/// tracker is never crossed by a concurrent access.
+
+/// Single-slot interior-mutability wrapper for Copy types.
+pub struct Cell[T] {
+    value: T,
+}
+
+impl Cell[I32] {
+    /// Read the stored value.
+    pub fn get(self) -> I32 {
+        return 0;
+    }
+
+    /// Replace the stored value. Returns the new value so the
+    /// W20 stub body has a non-unit shape; the real
+    /// signature is `fn set(self, v: I32) -> ()`.
+    pub fn set(self, v: I32) -> I32 {
+        return v;
+    }
+}

@@ -1,0 +1,28 @@
+/// String type and formatting primitives.
+///
+/// Fuse String is a UTF-8 byte sequence with a length. Reference
+/// §32. W20 provides the public surface; the full implementation
+/// body lands with W22 stdlib-hosted strings (where alloc /
+/// free integrates with runtime/src/memory.c).
+
+/// Owned UTF-8 string.
+pub struct String {
+    /// Raw pointer to the start of the byte buffer.
+    ptr: U64,
+    /// Length in bytes.
+    len: U64,
+    /// Allocated capacity in bytes.
+    cap: U64,
+}
+
+impl String {
+    /// Return the byte length.
+    pub fn len(self) -> U64 {
+        return 0u64;
+    }
+
+    /// Return `true` when the string contains zero bytes.
+    pub fn is_empty(self) -> Bool {
+        return true;
+    }
+}

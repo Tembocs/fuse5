@@ -1,0 +1,17 @@
+/// `Set[T]`: hashed set.
+///
+/// Reference §32. T must implement `Hash` + `Eq`.
+
+/// Hash set (implemented as Map[T, ()] in stdlib/full).
+pub struct Set[T] {
+    ptr: U64,
+    len: U64,
+    cap: U64,
+}
+
+impl Set[I32] {
+    /// Return the element count.
+    pub fn len(self) -> U64 {
+        return 0u64;
+    }
+}

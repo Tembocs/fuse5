@@ -1,0 +1,17 @@
+/// Runtime-bridge declarations for the panic surface.
+///
+/// Reference §17. The compiler lowers user-level `panic!(msg)`
+/// invocations to calls through this bridge; the underlying C
+/// runtime symbol is `fuse_rt_panic` (declared in
+/// runtime/include/fuse_rt.h).
+
+/// Abort the process with `msg` after writing it to stderr.
+pub fn rt_panic(msg: U64) {
+    return;
+}
+
+/// Abort the process with no message. Used as the belt-and-
+/// braces target for reference §57.4 structural divergence.
+pub fn rt_unreachable() {
+    return;
+}

@@ -1,0 +1,41 @@
+/// Ord and PartialOrd: ordering comparison.
+///
+/// Reference §5.8 and §24. Primitive integer / char types
+/// implement Ord; floating-point types implement PartialOrd
+/// only (NaN is incomparable).
+
+/// Ordering is the result of a comparison: Less, Equal, Greater.
+pub enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+
+/// Partial ordering. Returns an Option-shaped Ordering because
+/// incomparable values (NaN) produce `None`. The std exposes
+/// the Option type in stdlib/core/traits/option.fuse once the
+/// full enum-with-payload surface is wired.
+pub trait PartialOrd {
+    /// Compare `self` against `other`. Implementors return the
+    /// appropriate Ordering.
+    fn partial_cmp(self, other: Self) -> Ordering;
+
+    /// Default: `self.partial_cmp(other) == Ordering.Less`.
+    fn lt(self, other: Self) -> Bool {
+        return self.partial_cmp(other) == Ordering.Less;
+    }
+
+    /// Default: `self.partial_cmp(other) == Ordering.Greater`.
+    fn gt(self, other: Self) -> Bool {
+        return self.partial_cmp(other) == Ordering.Greater;
+    }
+}
+
+/// Total ordering. Extends PartialOrd with the invariant that
+/// every pair of values has a definite ordering (no NaN-style
+/// gaps).
+pub trait Ord {
+    /// Compare `self` against `other`. Always returns a concrete
+    /// Ordering.
+    fn cmp(self, other: Self) -> Ordering;
+}
