@@ -1,6 +1,6 @@
 {
-  "current_wave": "W14",
-  "current_phase": "PCL",
-  "updated": "2026-04-17",
-  "notes": "Compile-Time Evaluation wave in closure phase. Compile-time-evaluation stub retired: compiler/consteval/ package provides a pure evaluator (VKInt / VKBool / VKChar values round-tripped through typetable), a const-fn purity checker (rejects FFI / non-const calls / unsafe / spawn / closures / mutable borrows / interior-mutable names), a substitution pass that rewrites PathExpr -> LiteralExpr for const / static / array-length / enum-discriminant SymIDs before monomorphization, and size_of / align_of intrinsics routed through typetable layout queries. Driver wires CheckRestrictions -> Evaluate -> Substitute strictly between check.Check and monomorph.Specialize. HIR FnDecl / ConstDecl / StaticDecl / EnumDecl / Variant gained SymID fields populated by the bridge. Lower picked up a CastExpr passthrough and a Fuse-suffix-aware integer-literal parser. Proof: const_fn.fuse evaluates recursive 'const fn factorial(5u64) = 120' at compile time and main returns FACT_5 as I32; TestConstFnProof asserts exit code 120. STUBS.md W14 history block appended; WC014 logged using Rule 10.2 mandated 6-field template. Eighth full wave under Rule 9.5 three-commit discipline: P00 audit (3ecee62), implementation (see preceding SHA), PCL (this commit). Next: enter W15 MIR consolidation."
+  "current_wave": "W15",
+  "current_phase": "P00",
+  "updated": "2026-04-18",
+  "notes": "Lowering and MIR Consolidation wave entered. Rule 9.5 P00 commit: bump .claude/current-wave.json to {W15, P00}. The STUBS.md Active-row description for 'MIR consolidation (casts, fn pointers, slice range, struct update, overflow arithmetic)' remains accurate — no refresh needed. `go run tools/checkstubs/main.go -wave W15 -phase P00` and `go run tools/checkstubs/main.go -wave W15` both exit 0 with output 'checkstubs: ok'. No overdue stubs; every Active row retires in W15 or later. Implementation lands next."
 }
