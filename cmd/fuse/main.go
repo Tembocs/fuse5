@@ -23,6 +23,7 @@ import (
 	fusefmt "github.com/Tembocs/fuse5/compiler/fmt"
 	"github.com/Tembocs/fuse5/compiler/driver"
 	"github.com/Tembocs/fuse5/compiler/lex"
+	"github.com/Tembocs/fuse5/compiler/lsp"
 	"github.com/Tembocs/fuse5/compiler/parse"
 	"github.com/Tembocs/fuse5/compiler/repl"
 )
@@ -58,6 +59,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runDoc(args[1:], stdout, stderr)
 	case "repl":
 		return runRepl(stdout, stderr)
+	case "lsp":
+		return runLsp(stderr)
 	default:
 		fmt.Fprintf(stderr, "fuse: unknown subcommand %q; see `fuse help`\n", args[0])
 		return 2
@@ -80,6 +83,7 @@ func runHelp(stdout io.Writer) int {
 	fmt.Fprintln(stdout, "                              flag: --check (report non-canonical files, exit 1 on diff)")
 	fmt.Fprintln(stdout, "  doc <file>                  extract doc comments; --check flags missing docs on pub items")
 	fmt.Fprintln(stdout, "  repl                        interactive read-eval-print loop")
+	fmt.Fprintln(stdout, "  lsp                         start a Language Server Protocol session over stdio")
 	return 0
 }
 
@@ -378,6 +382,18 @@ func runRepl(stdout, stderr io.Writer) int {
 	r := repl.NewRepl(os.Stdin, stdout)
 	if err := r.Run(); err != nil {
 		fmt.Fprintf(stderr, "fuse repl: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// runLsp starts the language server over stdin / stdout so an
+// editor can drive a session. Blocks until the client sends the
+// `exit` notification or the connection closes.
+func runLsp(stderr io.Writer) int {
+	srv := lsp.New(os.Stdin, os.Stdout, version)
+	if err := srv.Run(); err != nil {
+		fmt.Fprintf(stderr, "fuse lsp: %v\n", err)
 		return 1
 	}
 	return 0

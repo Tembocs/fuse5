@@ -31,7 +31,7 @@ func TestSubcommandParser(t *testing.T) {
 		}
 		// Every subcommand must appear in help output so a user
 		// can discover them without reading the source.
-		for _, name := range []string{"build", "run", "check", "test", "fmt", "doc", "repl", "version", "help"} {
+		for _, name := range []string{"build", "run", "check", "test", "fmt", "doc", "repl", "lsp", "version", "help"} {
 			if !strings.Contains(stdout.String(), name) {
 				t.Errorf("help missing subcommand listing for %q: %s", name, stdout.String())
 			}
