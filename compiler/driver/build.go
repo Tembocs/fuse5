@@ -1,6 +1,9 @@
 package driver
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,7 +49,27 @@ type BuildOptions struct {
 	// the generated C so native debuggers see Fuse source lines.
 	// W17 P12 — bootstrap debug-info rides on the C backend.
 	Debug bool
+
+	// Cache, when non-nil, is consulted at the start of Build to
+	// short-circuit a redundant rebuild whose inputs — source
+	// bytes + Output path + Debug / KeepC flags + detected host C
+	// compiler identity — match a prior invocation. A hit whose
+	// binary is still on disk returns the recorded BuildResult
+	// without walking the pipeline. A miss (or a hit whose binary
+	// is gone) runs the full pipeline and repopulates the cache.
+	// Nil disables caching (the W18 MVP behaviour), so callers
+	// that never opt in pay nothing.
+	Cache *Cache
 }
+
+// buildCacheSchema versions the BuildResult payload stored under the
+// "build" pass key. Bump this any time the cached JSON shape changes
+// so older payloads are invalidated rather than silently misread.
+const buildCacheSchema = "build-v1"
+
+// buildCachePass is the pass name recorded in the manifest for cache
+// entries produced by Build.
+const buildCachePass = "build"
 
 // BuildResult reports the outcome of a successful build. BinaryPath
 // is the path to the produced executable; CSourcePath is the
@@ -68,6 +91,24 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 	src, err := os.ReadFile(opts.Source)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read source: %w", err)
+	}
+
+	// Cache consultation. The key composes the content of the source
+	// file and the inputs that influence the produced artifact (output
+	// path, debug / keep-C flags, host C compiler). A hit short-
+	// circuits the full pipeline when the recorded binary still
+	// exists on disk — a missing binary degrades to a miss so the
+	// caller never receives a stale BuildResult pointing at nothing.
+	var cacheKey string
+	if opts.Cache != nil {
+		cacheKey = buildCacheKey(opts, src)
+		if payload, hit := opts.Cache.Get(cacheKey); hit {
+			if res, ok := decodeCachedBuild(payload); ok {
+				if st, err := os.Stat(res.BinaryPath); err == nil && !st.IsDir() {
+					return res, nil, nil
+				}
+			}
+		}
 	}
 
 	// Parse.
@@ -216,7 +257,70 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 	// Do not remove the work directory when the user asked to keep
 	// the C source or when a custom WorkDir was provided; the
 	// caller owns the directory in those cases.
-	return &BuildResult{BinaryPath: binPath, CSourcePath: cPath}, nil, nil
+	result := &BuildResult{BinaryPath: binPath, CSourcePath: cPath}
+	if opts.Cache != nil && cacheKey != "" {
+		if payload, err := encodeCachedBuild(result); err == nil {
+			_ = opts.Cache.Put(cacheKey, buildCachePass, buildCacheSchema, payload)
+			_ = opts.Cache.Flush()
+		}
+	}
+	return result, nil, nil
+}
+
+// buildCacheKey derives the content-addressed key under which a
+// BuildResult is stored for `opts`. The key binds the source bytes
+// together with every input that influences the produced artifact so
+// a cache hit is always safe to reuse:
+//
+//   - Source bytes (parse / resolve / check / codegen all depend on these).
+//   - Output path (a different binary path is a different artifact).
+//   - Debug / KeepC flags (Debug flips codegen AND host-compiler flags).
+//   - Host C compiler identity (switching gcc↔cl invalidates).
+func buildCacheKey(opts BuildOptions, src []byte) string {
+	h := sha256.New()
+	h.Write([]byte(opts.Source))
+	h.Write([]byte{0})
+	h.Write(src)
+	h.Write([]byte{0})
+	h.Write([]byte(opts.Output))
+	h.Write([]byte{0})
+	if opts.Debug {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	if opts.KeepC {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	h.Write([]byte{0})
+	if cc1, err := cc.Detect(); err == nil {
+		h.Write([]byte(cc1.Path))
+		h.Write([]byte{0})
+		h.Write([]byte(cc1.Kind.String()))
+	}
+	fp := hex.EncodeToString(h.Sum(nil))
+	return Key(buildCachePass, []byte(fp))
+}
+
+// encodeCachedBuild serialises a BuildResult to the JSON shape the
+// cache persists.
+func encodeCachedBuild(r *BuildResult) ([]byte, error) {
+	return json.Marshal(r)
+}
+
+// decodeCachedBuild is the inverse. A decode failure reports `ok=false`
+// so the caller treats the entry as a miss rather than a silent error.
+func decodeCachedBuild(payload []byte) (*BuildResult, bool) {
+	var r BuildResult
+	if err := json.Unmarshal(payload, &r); err != nil {
+		return nil, false
+	}
+	if r.BinaryPath == "" {
+		return nil, false
+	}
+	return &r, true
 }
 
 // hasMain returns true when `main` is among the function names.

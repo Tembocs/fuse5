@@ -167,12 +167,14 @@ func emitFunction(sb *strings.Builder, f *mir.Function, asMain bool) error {
 				blk.BranchReg, blk.BranchConst, blk.TrueTarget, blk.FalseTarget)
 		case mir.TermUnreachable:
 			// Reference §57.4: a divergent block has no successors.
-			// The preceding OpPanic (or equivalent diverging call)
-			// already terminated the process; the hint abort here
-			// is a belt-and-braces guard so a compiler that folds
-			// away the panic still produces a program that does
-			// not fall through a reachable return.
+			// Emit two lines: (1) the EmitIntrinsic("unreachable")
+			// optimizer hint (__builtin_unreachable()) so the
+			// backend can prune downstream code and tighten
+			// register allocation, (2) the fuse_rt_abort belt-and-
+			// braces guard so the program still traps loudly if a
+			// release build folds the intrinsic into a no-op path.
 			sb.WriteString("    /* unreachable */\n")
+			fmt.Fprintf(sb, "    %s;\n", EmitIntrinsic("unreachable", nil))
 			sb.WriteString("    fuse_rt_abort(\"unreachable\");\n")
 		default:
 			return fmt.Errorf("fn %s block %d: unsupported terminator %s",
@@ -202,6 +204,20 @@ func emitInst(sb *strings.Builder, in mir.Inst) error {
 	case mir.OpParam:
 		fmt.Fprintf(sb, "    r%d = p%d;\n", in.Dst, in.ParamIndex)
 	case mir.OpCall:
+		// Compiler-intrinsic call names are prefixed with
+		// "__fuse_intrinsic_" (stable ABI for the lowerer → codegen
+		// hand-off) and routed to the EmitIntrinsic / EmitPtrNull /
+		// EmitSizeOf helpers rather than emitted as a plain C call.
+		// A normal function call falls through to the default
+		// `name(args...)` path. This keeps the intrinsic dispatch
+		// wired even before the source-level plumbing that creates
+		// these calls lands — any lowerer that emits a
+		// `__fuse_intrinsic_*` OpCall gets the right expansion
+		// today.
+		if expansion, ok := tryEmitCompilerIntrinsic(in); ok {
+			fmt.Fprintf(sb, "    r%d = %s;\n", in.Dst, expansion)
+			return nil
+		}
 		fmt.Fprintf(sb, "    r%d = %s(", in.Dst, in.CallName)
 		for i, a := range in.CallArgs {
 			if i > 0 {

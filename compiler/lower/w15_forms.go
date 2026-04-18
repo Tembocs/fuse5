@@ -228,14 +228,51 @@ func (l *lowerer) lowerCastTagged(modPath string, b *mir.Builder, x *hir.CastExp
 	if !ok {
 		return mir.NoReg, false
 	}
-	mode := l.classifyCast(x.Expr.TypeOf(), x.TypeOf())
+	srcType := x.Expr.TypeOf()
+	dstType := x.TypeOf()
+	mode := l.classifyCast(srcType, dstType)
 	if mode == mir.CastInvalid {
+		// Rule 6.9 — emit the specific STUBS.md-declared
+		// diagnostic for pointer-cast classification, which is
+		// the W26-retiring stub. The older "numeric / pointer
+		// / reinterpret casts are the only kinds W15
+		// classifies" message is reserved for genuinely
+		// non-classifiable casts that escape both the scalar
+		// and pointer ladders.
+		if l.isPointerCast(srcType, dstType) {
+			l.diagnose(x.NodeSpan(),
+				"pointer-to-integer and integer-to-pointer casts not yet classified (reference §28.1)",
+				"use a constructor (e.g. `Ptr::from_usize`) or an `unsafe` block until W26 brings the classifier online")
+			return mir.NoReg, false
+		}
 		l.diagnose(x.NodeSpan(),
 			"cast between source and target types is not supported",
 			"numeric / pointer / reinterpret casts are the only kinds W15 classifies; wrap the value through a constructor instead")
 		return mir.NoReg, false
 	}
 	return b.Cast(src, mode), true
+}
+
+// isPointerCast reports whether the (src, dst) pair names a
+// pointer-to-integer or integer-to-pointer shape. The STUBS.md
+// row "Pointer-cast classification" retires in W26 with a
+// concrete diagnostic; until then the lowerer emits the declared
+// text rather than the generic "not supported" fallback.
+func (l *lowerer) isPointerCast(src, dst typetable.TypeId) bool {
+	sT := l.prog.Types.Get(src)
+	dT := l.prog.Types.Get(dst)
+	if sT == nil || dT == nil {
+		return false
+	}
+	isPtr := func(k typetable.Kind) bool {
+		return k == typetable.KindPtr || k == typetable.KindRef || k == typetable.KindMutref
+	}
+	sPtr := isPtr(sT.Kind)
+	dPtr := isPtr(dT.Kind)
+	sScalar := l.isScalarType(src)
+	dScalar := l.isScalarType(dst)
+	// Pointer↔integer in either direction.
+	return (sPtr && dScalar) || (sScalar && dPtr)
 }
 
 // classifyCast walks the reference §28.1 classification ladder and

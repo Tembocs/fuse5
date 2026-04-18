@@ -24,20 +24,20 @@ func (c *checker) checkBodies() {
 func (c *checker) checkBodyOfItem(modPath string, it hir.Item) {
 	switch x := it.(type) {
 	case *hir.FnDecl:
-		c.checkFnBody(modPath, x)
+		c.checkFnBody(modPath, x, typetable.NoType)
 	case *hir.ImplDecl:
 		for _, sub := range x.Items {
 			if fn, ok := sub.(*hir.FnDecl); ok {
-				c.checkFnBody(modPath, fn)
+				c.checkFnBody(modPath, fn, x.Target)
 			}
 		}
 	case *hir.TraitDecl:
-		// Trait bodies are signatures only at W06; default method
-		// implementations in traits (when they land) will also
-		// flow through checkFnBody here.
+		// Trait default method bodies type-check against the trait's
+		// own Self (x.TypeID). Signature-only items (Body == nil)
+		// skip; checkFnBody bails on nil Body.
 		for _, sub := range x.Items {
 			if fn, ok := sub.(*hir.FnDecl); ok && fn.Body != nil {
-				c.checkFnBody(modPath, fn)
+				c.checkFnBody(modPath, fn, x.TypeID)
 			}
 		}
 	case *hir.ConstDecl:
@@ -107,20 +107,29 @@ func (s *bodyScope) returnType() typetable.TypeId {
 	return typetable.NoType
 }
 
-// checkFnBody types the parameters and body of fn.
-func (c *checker) checkFnBody(modPath string, fn *hir.FnDecl) {
+// checkFnBody types the parameters and body of fn. selfT is the
+// enclosing impl/trait's Self TypeId (NoType for free functions); it
+// is used as a fallback when a param's annotated type is Infer — i.e.
+// `Self` that the bridge could not resolve against its selfType stack
+// for some reason — and is also threaded into scope.selfT so that
+// `self` path lookups in expr.go can recover it.
+func (c *checker) checkFnBody(modPath string, fn *hir.FnDecl, selfT typetable.TypeId) {
 	c.stats.FunctionsChecked++
 	if fn.Body == nil {
 		return // extern / trait signature-only
 	}
-	scope := newBodyScope(nil, modPath, fn.Return, typetable.NoType)
+	scope := newBodyScope(nil, modPath, fn.Return, selfT)
 	for _, p := range fn.Params {
-		if p.TypeOf() == c.tab.Infer() || p.TypeOf() == typetable.NoType {
+		pt := p.TypeOf()
+		if selfT != typetable.NoType && pt == c.tab.Infer() {
+			pt = selfT
+		}
+		if pt == c.tab.Infer() || pt == typetable.NoType {
 			c.diagnose(p.Span, fmt.Sprintf("parameter %q has no declared type", p.Name),
 				"add a type annotation: `name: T`")
 			continue
 		}
-		scope.bind(p.Name, p.TypeOf())
+		scope.bind(p.Name, pt)
 	}
 	c.checkBlock(modPath, scope, fn.Body, fn.Return)
 }

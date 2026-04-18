@@ -88,6 +88,82 @@ func TestMinimalBuildInvocation_RejectsInvalid(t *testing.T) {
 	}
 }
 
+// TestBuildUsesCacheOnSecondInvocation pins the 2026-04-18 audit
+// fix wiring `driver.Cache` into `driver.Build`. With an identical
+// source, a second Build must short-circuit on the cache hit and
+// leave the previously-produced binary byte-for-byte identical —
+// a recompile would rewrite the file and bump its mtime.
+//
+// The stale-binary degrade path is also covered: removing the
+// binary on disk must force Build to re-run the pipeline rather
+// than silently returning a BuildResult pointing at nothing.
+func TestBuildUsesCacheOnSecondInvocation(t *testing.T) {
+	skipIfNoCC(t)
+
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "cached.fuse")
+	writeFile(t, srcPath, `fn main() -> I32 { return 0; }`)
+
+	cache, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open cache: %v", err)
+	}
+
+	first, _, err := Build(BuildOptions{
+		Source:  srcPath,
+		WorkDir: dir,
+		Cache:   cache,
+	})
+	if err != nil {
+		t.Fatalf("first Build: %v", err)
+	}
+	if cache.Size() == 0 {
+		t.Fatalf("cache did not record the successful build")
+	}
+	st1, err := os.Stat(first.BinaryPath)
+	if err != nil {
+		t.Fatalf("stat binary after first build: %v", err)
+	}
+
+	second, _, err := Build(BuildOptions{
+		Source:  srcPath,
+		WorkDir: dir,
+		Cache:   cache,
+	})
+	if err != nil {
+		t.Fatalf("second Build: %v", err)
+	}
+	if second == nil || second.BinaryPath != first.BinaryPath {
+		t.Fatalf("second Build returned %v, want BinaryPath=%s",
+			second, first.BinaryPath)
+	}
+	st2, err := os.Stat(second.BinaryPath)
+	if err != nil {
+		t.Fatalf("stat binary after second build: %v", err)
+	}
+	if !st1.ModTime().Equal(st2.ModTime()) {
+		t.Errorf("binary mtime changed across cached build: was %v, now %v",
+			st1.ModTime(), st2.ModTime())
+	}
+
+	// Stale-binary degrade: remove the binary. The next Build must
+	// treat the cache entry as invalid and re-run the pipeline.
+	if err := os.Remove(first.BinaryPath); err != nil {
+		t.Fatalf("remove binary: %v", err)
+	}
+	third, _, err := Build(BuildOptions{
+		Source:  srcPath,
+		WorkDir: dir,
+		Cache:   cache,
+	})
+	if err != nil {
+		t.Fatalf("third Build (post-stale): %v", err)
+	}
+	if _, err := os.Stat(third.BinaryPath); err != nil {
+		t.Fatalf("binary not repopulated after stale-degrade: %v", err)
+	}
+}
+
 // writeFile is a tiny helper for the tests above.
 func writeFile(t *testing.T, path, body string) {
 	t.Helper()

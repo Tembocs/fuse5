@@ -28,13 +28,21 @@ type Item struct {
 }
 
 // Extract walks src and returns the Item list in source order.
-// The walker is deliberately line-based — the W18 scope is "pair
-// doc comments with the immediately-following item declaration";
-// a full AST walk lands with W19 when LSP-level doc needs it.
+// The walker is line-based with a brace-depth tracker so that
+// items inside a `pub trait` or `pub impl` body inherit the
+// parent's visibility (the 2026-04-18 audit called this out as
+// a systemic classifier bug — W20 stdlib trait methods were
+// misclassified as private because the trait declaration sits
+// on the preceding line).
 func Extract(src []byte) []Item {
 	lines := strings.Split(string(src), "\n")
 	var out []Item
 	var pendingDoc []string
+	// pubParentDepth tracks the brace depth at which the
+	// nearest enclosing pub-trait or pub-impl opened. -1
+	// means "not inside such a scope."
+	pubParentDepth := -1
+	depth := 0
 	for i, raw := range lines {
 		trimmed := strings.TrimSpace(raw)
 		switch {
@@ -42,26 +50,61 @@ func Extract(src []byte) []Item {
 			pendingDoc = append(pendingDoc, strings.TrimSpace(strings.TrimPrefix(trimmed, "///")))
 			continue
 		case trimmed == "":
-			// Preserve a blank line within a doc run as a
-			// paragraph break; drop it between doc runs.
 			if len(pendingDoc) > 0 {
 				pendingDoc = append(pendingDoc, "")
 			}
 			continue
 		}
+
+		// Classify before updating brace depth so an item
+		// declaration on a line that also opens a brace is
+		// recorded at its enclosing depth, not inside itself.
 		if kind, name, isPub, ok := classifyItem(trimmed); ok {
+			// Inherit visibility from the enclosing scope
+			// when the raw classifier reports the item as
+			// private but we are inside a pub trait / pub
+			// impl body.
+			effectivePub := isPub || pubParentDepth >= 0
 			out = append(out, Item{
 				Kind:  kind,
 				Name:  name,
 				Line:  i + 1,
 				Doc:   strings.TrimSpace(strings.Join(pendingDoc, "\n")),
-				IsPub: isPub,
+				IsPub: effectivePub,
 			})
 			pendingDoc = nil
-			continue
+			// If this item opens a trait / impl body, record
+			// the depth so nested fn items can inherit.
+			if (kind == "trait" || kind == "impl") && effectivePub && strings.Contains(trimmed, "{") {
+				if pubParentDepth < 0 {
+					pubParentDepth = depth
+				}
+			}
+			// Fall through to update depth for the braces
+			// on this line.
 		}
-		// Non-item, non-doc line: reset any pending doc.
-		pendingDoc = nil
+
+		// Update running brace depth using the raw line. A
+		// trait body that opens `{` on the declaration line
+		// and closes `}` on a later line naturally pops
+		// pubParentDepth when the depth returns below the
+		// recorded level.
+		for _, c := range raw {
+			switch c {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if pubParentDepth >= 0 && depth <= pubParentDepth {
+					pubParentDepth = -1
+				}
+			}
+		}
+
+		// Any non-item line resets pending docs.
+		if _, _, _, isItem := classifyItem(trimmed); !isItem {
+			pendingDoc = nil
+		}
 	}
 	return out
 }

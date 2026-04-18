@@ -89,6 +89,44 @@ func TestTwoCrateProject(t *testing.T) {
 	// and the repo working tree stays clean.
 	defer os.Remove(lockPath)
 
+	// Contract 3a (2026-04-18 audit fix): the lockfile must
+	// actually record the mathlib dependency — before this fix
+	// the test only verified that SOME lockfile was written, not
+	// that the dep itself flowed through resolve.Resolve into
+	// Resolution.Entries. A broken resolver could emit an empty
+	// lockfile and this test would still pass. The assertions
+	// below pin the full W23 plumbing: manifest → resolver →
+	// locked entry → on-disk source still reachable → stable
+	// digest. Self-hosted cross-crate `use` is W25 work and is
+	// NOT asserted here (STUBS.md carries the Active row for
+	// that gap — see the "cross-crate use (W25)" entry).
+	var mathlibEntry *pkg.LockedCrate
+	for i := range lk.Entries {
+		if lk.Entries[i].Name == "mathlib" {
+			mathlibEntry = &lk.Entries[i]
+			break
+		}
+	}
+	if mathlibEntry == nil {
+		t.Fatalf("lockfile.Entries missing mathlib; got %+v", lk.Entries)
+	}
+	if mathlibEntry.Version == "" {
+		t.Errorf("mathlib locked with empty Version")
+	}
+	if mathlibEntry.Source == "" {
+		t.Errorf("mathlib locked with empty Source — path-dep was not wired through")
+	}
+	// The locked source for a path dep must point at a directory
+	// on disk whose lib.fuse exists. Anything else means the
+	// resolver produced a lock entry the fetcher can't honour.
+	libPath := filepath.Join(mathlibDir, "src", "lib.fuse")
+	if _, err := os.Stat(libPath); err != nil {
+		t.Errorf("mathlib src/lib.fuse not reachable at %s: %v", libPath, err)
+	}
+	if lk.Digest == "" {
+		t.Errorf("lockfile.Digest empty after Finalize — byte-stability contract broken")
+	}
+
 	// Contract 4: compile + run the root's main.fuse. At W23
 	// the dependency isn't yet inlined via `use` (that's W25);
 	// the proof-value path is the hand-written 42 in main.fuse

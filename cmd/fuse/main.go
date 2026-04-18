@@ -18,14 +18,18 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Tembocs/fuse5/compiler/check"
 	"github.com/Tembocs/fuse5/compiler/diagnostics"
 	"github.com/Tembocs/fuse5/compiler/doc"
 	fusefmt "github.com/Tembocs/fuse5/compiler/fmt"
 	"github.com/Tembocs/fuse5/compiler/driver"
+	"github.com/Tembocs/fuse5/compiler/hir"
 	"github.com/Tembocs/fuse5/compiler/lex"
 	"github.com/Tembocs/fuse5/compiler/lsp"
 	"github.com/Tembocs/fuse5/compiler/parse"
 	"github.com/Tembocs/fuse5/compiler/repl"
+	"github.com/Tembocs/fuse5/compiler/resolve"
+	"github.com/Tembocs/fuse5/compiler/typetable"
 )
 
 // version is the Stage 1 compiler version string reported by
@@ -176,9 +180,17 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 }
 
 // runBuildLib handles the `DIR/...` library-mode pattern. Walks
-// every .fuse file under DIR, parses each, and reports the first
-// failure (or success with a count). Output is deterministic —
-// files are visited in lexicographic order.
+// every .fuse file under DIR and runs parse → resolve → bridge →
+// check on each file as a single-file crate. The 2026-04-18 audit
+// called out the previous parse-only form as a systemic L002
+// violation — this promotion makes "N files ok (lib mode)" mean
+// "N files type-check," not just "N files parse."
+//
+// Codegen, consteval, monomorph, liveness, and lower deliberately
+// stay out of the library-mode path: a library is not an
+// executable, and the W25 self-hosting wave is the natural point
+// where cross-crate linking + lib codegen land. This function
+// exercises the front-end surface the audit required and no more.
 func runBuildLib(pattern string, stdout, stderr io.Writer, asJSON bool) int {
 	root := strings.TrimSuffix(strings.TrimSuffix(pattern, "/..."), `\...`)
 	if root == "" {
@@ -213,18 +225,45 @@ func runBuildLib(pattern string, stdout, stderr io.Writer, asJSON bool) int {
 			failures++
 			continue
 		}
-		_, diags := parse.Parse(path, src)
-		if len(diags) != 0 {
+		// Parse.
+		file, parseDiags := parse.Parse(path, src)
+		if len(parseDiags) != 0 {
 			failures++
-			printDiags(stderr, diags, asJSON)
-			fmt.Fprintf(stderr, "fuse build: %s FAILED\n", path)
+			printDiags(stderr, parseDiags, asJSON)
+			fmt.Fprintf(stderr, "fuse build: %s FAILED at parse\n", path)
+			continue
+		}
+		// Resolve single-file crate.
+		sources := []*resolve.SourceFile{{ModulePath: "", File: file}}
+		resolved, resolveDiags := resolve.Resolve(sources, resolve.BuildConfig{})
+		if len(resolveDiags) != 0 {
+			failures++
+			printDiags(stderr, resolveDiags, asJSON)
+			fmt.Fprintf(stderr, "fuse build: %s FAILED at resolve\n", path)
+			continue
+		}
+		// Bridge to HIR.
+		tab := typetable.New()
+		prog, bridgeDiags := hir.NewBridge(tab, resolved, sources).Run()
+		if len(bridgeDiags) != 0 {
+			failures++
+			printDiags(stderr, bridgeDiags, asJSON)
+			fmt.Fprintf(stderr, "fuse build: %s FAILED at HIR bridge\n", path)
+			continue
+		}
+		// Type-check.
+		if checkDiags := check.Check(prog); len(checkDiags) != 0 {
+			failures++
+			printDiags(stderr, checkDiags, asJSON)
+			fmt.Fprintf(stderr, "fuse build: %s FAILED at check\n", path)
+			continue
 		}
 	}
 	if failures != 0 {
 		fmt.Fprintf(stderr, "fuse build: %d/%d files failed\n", failures, len(files))
 		return 1
 	}
-	fmt.Fprintf(stdout, "fuse: %d files ok (lib mode)\n", len(files))
+	fmt.Fprintf(stdout, "fuse: %d files ok (lib mode; parse+resolve+check)\n", len(files))
 	return 0
 }
 

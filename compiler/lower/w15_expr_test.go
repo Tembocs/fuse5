@@ -9,6 +9,36 @@ import (
 	"github.com/Tembocs/fuse5/compiler/typetable"
 )
 
+// TestPointerCastDiagnostic pins the W15 pointer-cast diagnostic
+// established by the 2026-04-18 audit fix. A `ptr as int` shape
+// (or the reverse) must emit the STUBS.md-declared text rather
+// than fall through to the generic "not supported" message.
+// Rule 6.9 — no silent stubs.
+func TestPointerCastDiagnostic(t *testing.T) {
+	l, _, b, tab := w15TestLowerer(t)
+	// Build a cast from Ptr[I32] to I64 (a pointer-to-integer
+	// cast the W15 classifier rejects).
+	ptrType := tab.Ptr(tab.I32())
+	innerReg := b.ConstInt(0)
+	_ = innerReg
+	// Hand-build a CastExpr whose inner already has a Ptr type.
+	cast := &hir.CastExpr{
+		TypedBase: hir.TypedBase{Type: tab.I64()},
+		Expr:      mkLitInt(tab, "0", ptrType),
+	}
+	_, ok := l.lowerCastTagged("", b, cast, nil)
+	if ok {
+		t.Fatalf("pointer-to-integer cast should be rejected")
+	}
+	if len(l.diags) == 0 {
+		t.Fatalf("no diagnostic for pointer cast")
+	}
+	msg := l.diags[len(l.diags)-1].Message
+	if !contains(msg, "pointer-to-integer and integer-to-pointer casts not yet classified") {
+		t.Errorf("diagnostic does not match STUBS.md declared text: %q", msg)
+	}
+}
+
 // TestCastLowering verifies the W15 cast-classification ladder
 // (reference §28.1): every (source, target) pair produces a
 // specific CastMode that feeds OpCast. This is the structural

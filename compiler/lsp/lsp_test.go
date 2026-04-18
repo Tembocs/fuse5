@@ -154,6 +154,46 @@ func TestLspDiagnosticsStream(t *testing.T) {
 	}
 }
 
+// TestLspDiagnosticsSemantic pins the 2026-04-18 audit fix
+// promoting computeDiagnostics from parse-only to
+// parse+resolve+bridge+check. A source that parses cleanly but
+// fails type-checking (return of `Unit` where `I32` is declared)
+// must now produce a diagnostic whose Message carries the
+// checker's hint inline as ` hint: <text>`.
+func TestLspDiagnosticsSemantic(t *testing.T) {
+	s, client := newTestServer(t)
+	uri := "file:///ws/semantic.fuse"
+
+	// Parses cleanly; the checker complains because the return
+	// expression is Bool but the fn declares I32.
+	src := `fn main() -> I32 { let x: Bool = true; return x; }`
+	must(t, s.Handle(didOpenMsg(uri, src, 1)))
+
+	notes := client.notifications("textDocument/publishDiagnostics")
+	if len(notes) == 0 {
+		t.Fatalf("no publishDiagnostics notification fired")
+	}
+	var params PublishDiagnosticsParams
+	raw, _ := json.Marshal(notes[len(notes)-1].Params)
+	if err := json.Unmarshal(raw, &params); err != nil {
+		t.Fatalf("decode params: %v", err)
+	}
+	if len(params.Diagnostics) == 0 {
+		t.Fatalf("expected ≥1 check diagnostic for return-type mismatch")
+	}
+	sawHint := false
+	for _, d := range params.Diagnostics {
+		if strings.Contains(d.Message, " hint: ") {
+			sawHint = true
+			break
+		}
+	}
+	if !sawHint {
+		t.Errorf("no diagnostic carried an inline `hint:` payload; messages=%+v",
+			params.Diagnostics)
+	}
+}
+
 // -- Quick fixes -----------------------------------------------
 
 // TestLspQuickFixes verifies that a diagnostic with a trailing

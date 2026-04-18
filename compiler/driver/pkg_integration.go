@@ -70,26 +70,61 @@ func ResolveForSource(sourcePath string, offline bool) (*pkg.Lockfile, error) {
 	emptyIdx := &emptyRegistry{}
 	r := &pkg.Resolver{Index: emptyIdx}
 	res, rerr := r.Resolve(m)
+	manifestDir := filepath.Dir(manifestPath)
 	if rerr != nil {
 		// At W23 the resolver errors only when the manifest
 		// declares a registry dep that the empty index cannot
 		// satisfy. Path-only projects resolve successfully to
 		// an empty entry list.
 		if rerr.Kind == "unknown" && hasOnlyPathDeps(m) {
-			// Shouldn't happen, but if it does, write an
-			// empty lockfile so subsequent runs short-circuit.
 			lk := pkg.NewLockfile(m.IDString())
+			appendPathDeps(lk, m, manifestDir)
 			lk.Finalize()
 			_ = writeLockfile(lockPath, lk)
 			return lk, nil
 		}
 		return nil, fmt.Errorf("resolve: %s", rerr.Error())
 	}
+	// The resolver ignores path-dependencies (they bypass the
+	// version index). Augment its Resolution with one LockedCrate
+	// per declared path dep so the lockfile records every crate the
+	// build will read — not just the registry ones.
 	lk := res.ToLockfile()
+	appendPathDeps(lk, m, manifestDir)
+	lk.Finalize()
 	if err := writeLockfile(lockPath, lk); err != nil {
 		return nil, err
 	}
 	return lk, nil
+}
+
+// appendPathDeps adds one LockedCrate per declared path-dependency
+// to `lk`. The version is taken from the dep crate's own fuse.toml
+// when that file is readable; otherwise a "0.0.0-path" sentinel is
+// recorded so downstream consumers can still distinguish a path dep
+// from a registry one. The Source column stores the **absolute**
+// path so the lockfile stays usable from any working directory.
+func appendPathDeps(lk *pkg.Lockfile, m *pkg.Manifest, manifestDir string) {
+	for _, d := range m.Dependencies {
+		if d.Path == "" {
+			continue
+		}
+		absPath := d.Path
+		if !filepath.IsAbs(absPath) {
+			absPath = filepath.Clean(filepath.Join(manifestDir, d.Path))
+		}
+		version := "0.0.0-path"
+		if body, err := os.ReadFile(filepath.Join(absPath, "fuse.toml")); err == nil {
+			if depM, err := pkg.ParseManifest(body); err == nil && depM.Package != nil && depM.Package.Version != "" {
+				version = depM.Package.Version
+			}
+		}
+		lk.AddCrate(pkg.LockedCrate{
+			Name:    d.Name,
+			Version: version,
+			Source:  absPath,
+		})
+	}
 }
 
 // findManifest walks up from sourcePath until it finds a

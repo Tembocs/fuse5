@@ -2,8 +2,80 @@ package codegen
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/Tembocs/fuse5/compiler/mir"
 )
+
+// compilerIntrinsicPrefix is the stable callee-name prefix the
+// lowerer uses to mark an OpCall whose callee is a compiler
+// intrinsic rather than a user function. Routing by prefix keeps
+// the MIR op set small (no new opcodes) while still giving the
+// emitter a deterministic decision point. Format:
+//
+//	__fuse_intrinsic_<name>[__<payload>]
+//
+// Examples:
+//
+//	__fuse_intrinsic_unreachable
+//	__fuse_intrinsic_likely
+//	__fuse_intrinsic_ptr_null__int64_t
+//	__fuse_intrinsic_size_of__8
+const compilerIntrinsicPrefix = "__fuse_intrinsic_"
+
+// tryEmitCompilerIntrinsic inspects `in.CallName` and, if it names
+// a compiler intrinsic, returns the C expression the OpCall site
+// should assign to in.Dst plus ok=true. A non-intrinsic name
+// returns ok=false so the caller falls through to the plain
+// `name(args...)` emission.
+//
+// The function is deliberately total: every currently-recognised
+// intrinsic has a helper in this file and every unrecognised name
+// just returns false.
+func tryEmitCompilerIntrinsic(in mir.Inst) (string, bool) {
+	name := in.CallName
+	if !strings.HasPrefix(name, compilerIntrinsicPrefix) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(name, compilerIntrinsicPrefix)
+	// Split the intrinsic name from any `__payload` (e.g. the type
+	// for ptr_null, the byte count for size_of). The payload is
+	// opaque to this function — each arm interprets its own.
+	op, payload, hasPayload := cutOnce(rest, "__")
+	regExprs := make([]string, len(in.CallArgs))
+	for i, a := range in.CallArgs {
+		regExprs[i] = fmt.Sprintf("r%d", a)
+	}
+	switch op {
+	case "unreachable", "likely", "unlikely", "assume", "fence", "prefetch":
+		return EmitIntrinsic(op, regExprs), true
+	case "ptr_null":
+		target := ""
+		if hasPayload {
+			target = payload
+		}
+		return EmitPtrNull(target), true
+	case "size_of":
+		bytes := uint64(0)
+		if hasPayload {
+			if n, err := strconv.ParseUint(payload, 10, 64); err == nil {
+				bytes = n
+			}
+		}
+		return EmitSizeOf(bytes), true
+	}
+	return "", false
+}
+
+// cutOnce is strings.Cut from Go 1.18+; replicated locally to
+// avoid pulling the import graph wider just for one call site.
+func cutOnce(s, sep string) (before, after string, found bool) {
+	if i := strings.Index(s, sep); i >= 0 {
+		return s[:i], s[i+len(sep):], true
+	}
+	return s, "", false
+}
 
 // EmitIntrinsic renders the C-level expansion for a Fuse compiler
 // intrinsic. Reference §57 enumerates the intrinsic set; W17 maps

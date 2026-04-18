@@ -164,6 +164,66 @@ func TestStructuralDivergence(t *testing.T) {
 	if !strings.Contains(out, "fuse_rt_abort(\"unreachable\")") {
 		t.Errorf("divergence guard missing: %s", out)
 	}
+	// 2026-04-18 audit fix: TermUnreachable now also emits the
+	// EmitIntrinsic("unreachable") optimizer hint so the C backend
+	// prunes downstream code and tightens register allocation.
+	if !strings.Contains(out, "__builtin_unreachable()") {
+		t.Errorf("unreachable optimizer hint missing (EmitIntrinsic not wired): %s", out)
+	}
+}
+
+// TestCompilerIntrinsicDispatch pins the 2026-04-18 audit fix
+// wiring EmitPtrNull / EmitSizeOf / EmitIntrinsic through the
+// OpCall dispatch. A MIR Inst whose CallName starts with
+// `__fuse_intrinsic_` must route through the intrinsic emitters
+// and NOT be emitted as a plain C `name(args...)` call. This
+// proves the path exists end-to-end even before the source-level
+// lowerer plumbing that produces these calls.
+func TestCompilerIntrinsicDispatch(t *testing.T) {
+	cases := []struct {
+		name     string
+		callName string
+		wantSub  string // substring EmitC11 must contain
+		dontWant string // substring that would mean the helper was skipped
+	}{
+		{
+			name:     "unreachable intrinsic",
+			callName: "__fuse_intrinsic_unreachable",
+			wantSub:  "__builtin_unreachable()",
+			dontWant: "__fuse_intrinsic_unreachable(",
+		},
+		{
+			name:     "ptr_null with type payload",
+			callName: "__fuse_intrinsic_ptr_null__int64_t",
+			wantSub:  "((int64_t*)0)",
+			dontWant: "__fuse_intrinsic_ptr_null",
+		},
+		{
+			name:     "size_of with byte-count payload",
+			callName: "__fuse_intrinsic_size_of__16",
+			wantSub:  "((uint64_t)16)",
+			dontWant: "__fuse_intrinsic_size_of",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fn, b := mir.NewFunction("", "main")
+			// Emit a direct call intrinsic followed by a return.
+			dst := b.Call(tc.callName, nil)
+			b.Return(dst)
+			mod := &mir.Module{Functions: []*mir.Function{fn}}
+			out, err := EmitC11(mod)
+			if err != nil {
+				t.Fatalf("EmitC11: %v", err)
+			}
+			if !strings.Contains(out, tc.wantSub) {
+				t.Errorf("missing %q in output\n---\n%s", tc.wantSub, out)
+			}
+			if strings.Contains(out, tc.dontWant+"(") {
+				t.Errorf("intrinsic was emitted as plain C call (%q found)\n---\n%s", tc.dontWant+"(", out)
+			}
+		})
+	}
 }
 
 // -- Phase 05: Repr + Align --

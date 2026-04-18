@@ -4058,3 +4058,105 @@ CC=gcc go test ./...
 All commands exited 0 on this machine (windows/amd64,
 MinGW-W64 gcc 15.x, go1.22+). CI matrix green on the
 committed SHA is the authoritative record.
+
+### L018 — Deferral references across WC021 / WC022 / WC023 drift to unplanned waves
+
+Date: 2026-04-18
+
+Type: supersession entry (Rule 10.1 — the log is append-only;
+these corrections do not edit the original WC entries, they
+supersede the incorrect deferrals recorded there).
+
+**Entries superseded:**
+
+- WC021 "What the next wave must know" — defers `@global_allocator`
+  attribute recognition to "W23 package management."
+- WC022 "What was harder than planned" — refers to "W24 macro-
+  dispatch wave" when deferring format-string macros.
+- WC023 "What was harder than planned" — defers `fuse vendor`
+  recursive unpack to "W24's job" and cross-crate `use` to
+  "W25 stage-2 self-hosting."
+
+**Findings from the 2026-04-18 audit:**
+
+The audit identified these as plan-document contradictions
+because:
+- W24 is the Stub Clearance Gate, not a macro-dispatch or
+  vendor-stitching wave.
+- W25 is Stage 2 and Self-Hosting; its wave doc does not list
+  cross-crate `use` resolution as a deliverable.
+- W23 did not in fact implement `@global_allocator`.
+
+**Correction:**
+
+The canonical tracking for each deferred item now lives as a
+row in the `STUBS.md` Active table (added 2026-04-18):
+
+| Deferred item                              | STUBS.md row retiring wave |
+|--------------------------------------------|----------------------------|
+| `@global_allocator` attribute              | W26                         |
+| Format-string macros                       | not yet tracked; see L019  |
+| `fuse vendor` recursive unpack             | W26                         |
+| Cross-crate `use` resolution               | W25                         |
+| Stdlib body completion                     | W25                         |
+| `ThreadHandle.join()` Result wrapping      | W25                         |
+| Capturing-closure spawn lifting            | W25                         |
+| Codegen W17 attribute / intrinsic wiring   | W26                         |
+| Overflow-arithmetic MSVC fallback          | W26                         |
+| Per-statement #line directives             | W26                         |
+| Pointer-cast classification                | W26                         |
+| LSP UTF-16 position width                  | W26                         |
+| W17 perf benchmark corpus                  | W27                         |
+
+When a wave's closure needs to reference one of these, it
+should cite the `STUBS.md` row (retiring wave) and not a
+free-form wave reference in the closure prose. That way the
+tracking stays in one authoritative place and future audits do
+not have to reconcile prose references with planned waves.
+
+**How to apply:** Wave docs and future WCxxx entries treat
+`STUBS.md` Active rows as the source of truth for when a
+deferred item retires. Closure prose may still explain the
+tradeoff, but it must not assign work to a wave whose wave-doc
+does not schedule it. The 2026-04-18 STUBS.md repopulation
+(see docs/audit/report-20260418-131730.md §Fix 1) is the
+authoritative record for the retiring-wave assignments above.
+
+### L019 — Format-string macros are not scheduled
+
+Date: 2026-04-18
+
+Type: planning gap.
+
+**Finding:** WC022 refers to "W24 macro-dispatch wave" when
+deferring stdlib `print!` / `println!` / `format!` surface
+macros. W24 is the Stub Clearance Gate. The macro dispatch
+infrastructure for these forms does not appear in any
+scheduled wave's exit criteria.
+
+**Root cause:** Fuse's macro surface was under-specified in
+the W00 plan. Macros are referenced in the language reference
+(§1.6 and §32.4) but never scheduled into a wave that would
+ship them.
+
+**Plan gap:** The implementation plan does not name a wave
+that delivers macros. W24 is clearance, W25 is self-hosting,
+W26 is native backend, W27 is perf gate, W28 retires Go/C,
+W29 is target matrix, W30 is ecosystem docs. None of these
+as written would unblock `println!`.
+
+**Fix:** Until a wave is formally added for the macro surface
+(candidate: a hypothetical W26.5 or bundling into W30 docs
+work with macro examples), the stdlib `print` / `println` /
+`eprint` / `eprintln` functions ship as raw-byte forwarders
+with (U64 pointer, U64 length) signatures. User code can
+build strings manually via the stdlib/core/string surface and
+call these forwarders; the macro sugar is a future-work item.
+A STUBS.md row is NOT added at this closure because the
+retiring-wave assignment would require a plan amendment.
+
+**Architectural lesson:** Future plan amendments must include
+every user-surface feature referenced in the language
+reference. A reference mention without a plan entry is a
+latent planning gap that emerges only when a wave closure
+tries to defer to a non-existent target.

@@ -54,6 +54,13 @@ type Bridge struct {
 	// Populated by pushGenerics before lowering an item's types and
 	// cleared afterwards so leakage across items is impossible.
 	genericScope map[string]typetable.TypeId
+
+	// selfType is the TypeId that `Self` (and an unannotated `self`
+	// parameter) refers to while lowering items nested inside an
+	// ImplDecl or TraitDecl. Set by lowerImpl/lowerTrait before
+	// iterating children and restored after. NoType when not inside
+	// an impl/trait frame.
+	selfType typetable.TypeId
 }
 
 // NewBridge constructs a Bridge with all inputs wired up. The
@@ -327,7 +334,14 @@ func (b *Bridge) lowerFn(modPath string, x *ast.FnDecl) *FnDecl {
 	params := make([]*Param, 0, len(x.Params))
 	for i, p := range x.Params {
 		paramID := idb.Child(fmt.Sprintf("%d", i))
-		paramType := b.lowerType(modPath, p.Type)
+		var paramType typetable.TypeId
+		if p.Type == nil && p.Name.Name == "self" && b.selfType != typetable.NoType {
+			// `self` shorthand: parser leaves Type nil; resolve to the
+			// enclosing impl/trait's Self type (reference §9).
+			paramType = b.selfType
+		} else {
+			paramType = b.lowerType(modPath, p.Type)
+		}
 		params = append(params, b.Builder.NewParam(
 			paramID, p.NodeSpan(), p.Name.Name, paramType, toOwnership(p.Ownership)))
 	}
@@ -516,12 +530,15 @@ func (b *Bridge) lowerTrait(modPath string, x *ast.TraitDecl) *TraitDecl {
 	}
 	// Trait body items are lowered but — at W04 — not fully typed;
 	// type-checker integration lands in W06.
+	savedSelf := b.selfType
+	b.selfType = typeID
 	var items []Item
 	for _, it := range x.Items {
 		if li := b.lowerItem(modPath, it); li != nil {
 			items = append(items, li)
 		}
 	}
+	b.selfType = savedSelf
 	return &TraitDecl{
 		Base:     Base{ID: ItemID(modPath, x.Name.Name), Span: x.NodeSpan()},
 		Name:     x.Name.Name,
@@ -539,12 +556,15 @@ func (b *Bridge) lowerImpl(modPath string, x *ast.ImplDecl) *ImplDecl {
 	}
 	anchor := "impl_" + typeTextForIdentity(b.Types, target)
 	_ = anchor // reserved for nested item lowering once W06 drives it
+	savedSelf := b.selfType
+	b.selfType = target
 	var items []Item
 	for _, it := range x.Items {
 		if li := b.lowerItem(modPath, it); li != nil {
 			items = append(items, li)
 		}
 	}
+	b.selfType = savedSelf
 	return &ImplDecl{
 		Base:   Base{ID: NodeID(fmt.Sprintf("%s::impl:%d", modPath, target)), Span: x.NodeSpan()},
 		Target: target,
@@ -612,6 +632,9 @@ func (b *Bridge) lowerType(modPath string, t ast.Type) typetable.TypeId {
 // span; (d) fallback to Infer.
 func (b *Bridge) lowerPathType(modPath string, x *ast.PathType) typetable.TypeId {
 	if len(x.Segments) == 1 {
+		if x.Segments[0].Name == "Self" && b.selfType != typetable.NoType && len(x.Args) == 0 {
+			return b.selfType
+		}
 		if tid := primitiveKindLookup(b.Types, x.Segments[0].Name); tid != typetable.NoType {
 			return tid
 		}

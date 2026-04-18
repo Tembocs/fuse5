@@ -57,6 +57,15 @@ pub const MAX: I32 = 100;
 		t.Errorf("Point doc missing: %q", it.Doc)
 	}
 
+	// All top-level pub items in the sample must be recorded
+	// as pub — including methods declared inside pub trait /
+	// impl bodies (2026-04-18 audit fix: the classifier
+	// previously dropped these to private).
+	byKindName := map[string]Item{}
+	for _, it := range items {
+		byKindName[it.Kind+":"+it.Name] = it
+	}
+
 	missing := CheckMissingDocs(items)
 	// Undocumented + MAX (both pub, both no doc) should appear.
 	var seenUndoc, seenMax bool
