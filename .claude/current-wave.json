@@ -1,6 +1,6 @@
 {
-  "current_wave": "W22",
-  "current_phase": "PCL",
+  "current_wave": "W23",
+  "current_phase": "P00",
   "updated": "2026-04-18",
-  "notes": "Stdlib Hosted wave in closure phase. Stdlib-hosted stub retired: stdlib/full/ ships 13 Fuse source files across io, fs, os, time, thread (ThreadHandle[T]), sync (Mutex / RwLock / Cond / Once / Shared), chan (Chan[T] + ChanResult). Every pub item documented. Core/hosted boundary invariant test-locked by TestHostedStdlib's leak check (strips /// doc lines then scans stdlib/core for import-like qualified-path patterns pointing at stdlib/full). TestHostedStdlib + TestConcurrency (3 sub-tests) cover the structural contract; runtime-observable behaviour was proven end-to-end at W16 via native-binary spawn / channel proofs. STUBS.md W22 history block appended; WC022 logged using Rule 10.2 template. Sixteenth full wave under Rule 9.5 three-commit discipline: P00 audit (8b9ea11), implementation (3678d55), PCL (this commit). Next: enter W23 Package Management."
+  "notes": "Package Management wave entered. Rule 9.5 P00 commit. `go run tools/checkstubs/main.go -wave W23 -phase P00` exits 0. Implementation lands next — compiler/pkg/ (manifest parser, lockfile, version range algebra, deterministic resolver, HTTPS fetcher with SHA-256 integrity, registry index/metadata schemas, cycle detection), docs/registry-protocol.md frozen spec, tools/checkdocs -registry-protocol-frozen flag, CLI subcommands (fuse add/remove/update/vendor), driver integration, tests/e2e/two_crate_project TestTwoCrateProject proof."
 }
