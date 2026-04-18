@@ -4572,3 +4572,47 @@ assigned STUBS.md rows cannot honestly retire at W25 under
 Rule 6.18 unless the W25 plan is first amended to add explicit
 phases for each, with named Verify commands. That amendment is
 the prerequisite to W25 entry, not a discretionary addition.
+
+### L022 — Forensic record: where each residual should have landed
+
+Date: 2026-04-18
+
+Type: factual record. Each row names the feature, its current
+STUBS.md retiring-wave assignment, the wave + phase whose exit
+criterion originally owned it (citing the wave-doc verbatim),
+and where the drift entered the record.
+
+| # | Residual | Current STUBS | Owner wave:phase (by exit criterion) | Wave-doc exit language | First drift |
+|---|---|---|---|---|---|
+| 1 | Capturing-closure spawn lifting | W25 | **W12-P01-T03 + W12-P03-T01**, composed with **W07-P03-T02** | W12: "closure body lifted to standalone MIR function ... closure expression emits struct init + function pointer pair". W07: spawn-Send bound on captured environment. | WC012 closed without a capturing-spawn proof; WC017 admitted "capturing closures remain a known gap" without filing a STUBS row |
+| 2 | `ThreadHandle.join()` → `Result[T, ThreadError]` | W25 | **W16-P03 + W16-P05** (runtime ABI + concurrency proof) | W16 exit: "`ThreadHandle.join()` ... returns a value of type `Result[T, ThreadError]`" | WC016 returned bare `int64_t`; `ThreadError` nominal type was never added to stdlib/core at W20 either |
+| 3 | `@repr` / `@align` / `@inline` / `@cold` / variadic-ABI attribute propagation | W26 | **W17-P05 (Layout) + W17-P06 (Inline/Cold) + W17-P07 (Intrinsics) + W17-P08 (Variadic) + W17-P09 (Memory) + W17-P10 (Overflow)** | W17 exit: "backend contracts enforced" — every listed phase is a W17 phase by name | WC017 shipped the helpers (`EmitReprAttr`, `EmitAlignAttr`, `EmitInlineAttr`, `EmitIntrinsic`, `EmitVariadicCall`, `EmitOverflowAdd/Sub/Mul`) unit-tested in isolation; the 2026-04-18 audit §W17 called this "the textbook L013 pattern" (seven phases ceremonial) |
+| 4 | Stdlib body completion (core) | W25 | **W20-P0x (every body-owning phase)** | W20 exit: "core traits, primitives, strings, collections, Cell/RefCell, Ptr.null, overflow methods" — "methods" means implemented | WC020 shipped `return 0;` / `return true;` placeholders; WC020 "What was harder than planned" cited checker `-> ()` gap, struct-literal turbofish, `Option[T]` returns as the blockers. None were filed as STUBS rows; all deferred to "W22 stdlib hosted" prose |
+| 5 | Stdlib body completion (hosted) | W25 | **W22-Pnn (every shipped module)** | W22 exit: "IO, fs, os, time, thread, sync, channels, network ship" | WC022 shipped the same placeholder shape as W20 and referenced "W24 macro-dispatch wave" (which does not exist — see [L019](#l019--format-string-macros-are-not-scheduled)) |
+| 6 | Cross-crate `use` resolution | W25 | **W23-P0x (two-crate proof)** | W23 exit: "a two-crate project resolves, builds, runs, and returns a computed value from the dependency" | WC023's `root/src/main.fuse` hard-codes `return 42;` without calling into `mathlib`; the 2026-04-18 audit §W23 also surfaced `pkg.Resolver.initialConstraints` dropping path-deps from the lockfile, fixed in Fix 8 |
+| 7 | Multi-statement fn bodies (implicit blocker for #4, #5) | not in STUBS | **W06 or W09 (at latest)** | W06 exit: "stdlib and user bodies type-check with no unknowns" — multi-fn requires multi-statement; W09 exit: borrow rules enforced, which presumes `let` bindings in bodies | No wave closure flagged the W05 spine restriction as overdue; [compiler/lower/lower.go:109](compiler/lower/lower.go#L109) still enforces "exactly one statement per fn body" |
+
+Two additional records for completeness:
+
+- **Performance gate.** Originally W17-P13 ("Performance
+  Baseline"). Retired at W17 as a corpus-of-Go-stand-ins rather
+  than real compiler hot paths; fully re-grounded only at W24
+  (see WC024). CI enforcement against thresholds.json was pushed
+  to W27 from the pre-W24 Active row text; the enforcement step
+  was never in a wave doc.
+- **Format-string macros** (`print!` / `println!` / `format!`).
+  Referenced in the language reference §1.6 and §32.4; not
+  scheduled in any wave. [L019](#l019--format-string-macros-are-not-scheduled)
+  recorded the planning gap. Stdlib body completion (#4, #5) is
+  partially blocked on this for any module that wants formatted
+  output.
+
+The pattern across rows 1–6 is uniform: each wave's exit
+criterion fully named the feature; each wave closed by shipping
+the scaffolding (types declared, fn signatures present, helpers
+unit-tested) and deferring the substance to a prose reference
+that pointed at a later wave whose plan did not schedule the
+work. The 2026-04-18 retrospective audit caught this across
+W15–W23 at once; Rule 6.18
+([L021](#l021--features-must-be-completed-to-their-full-declared-scope-in-the-wavephase-that-claims-them-done))
+forbids the pattern going forward.
