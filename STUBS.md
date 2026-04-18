@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Language server (LSP 3.17) | compiler/ (not yet created lsp/) | no LSP server | "fuse lsp not yet implemented" | W19 |
 | Stdlib core (traits, primitives, strings, collections, Cell/RefCell, Ptr.null, overflow methods) | stdlib/core/ (empty) | no stdlib | "stdlib core not yet implemented" | W20 |
 | Custom allocators (Allocator trait, parameterized collections) | stdlib/core/alloc/ (not yet created) | no allocator trait | "custom allocators not yet implemented" | W21 |
 | Stdlib hosted (IO, fs, os, time, thread, sync, channels, network) | stdlib/full/ (empty) | no hosted stdlib | "stdlib hosted not yet implemented" | W22 |
@@ -770,5 +769,66 @@ Retired:
   bogus through it; `TestIncrementalEditCycle` asserts warm
   builds are not catastrophically slower than cold (W27
   tightens to measurable speedup).
+
+Rescheduled: (none this wave)
+
+### W19 — Language Server
+
+Added: (none this wave)
+
+Retired:
+- Language server (LSP 3.17) (compiler/lsp/types.go —
+  protocol types; compiler/lsp/transport.go — JSON-RPC over
+  Content-Length framing with serialised writes;
+  compiler/lsp/docstore.go — in-memory didOpen / didChange /
+  didClose model with range-based edits and deterministic
+  URIs(); compiler/lsp/server.go — Server.Run dispatch loop
+  routing initialize / initialized / shutdown / exit and
+  every textDocument/* method; compiler/lsp/diagnostics.go —
+  parse-on-edit pipeline producing LSP-shaped diagnostics;
+  compiler/lsp/handlers.go — hover / goto / completion /
+  documentSymbol / workspaceSymbol / codeAction handlers
+  using doc.Extract as the resolver surface;
+  compiler/lsp/semantic_tokens.go — packed-data encoder with
+  keyword / type / function / variable classification;
+  compiler/lsp/lsp_test.go — ten tests covering every wave-
+  doc Verify command; cmd/fuse/main.go — `fuse lsp`
+  subcommand running lsp.New over stdin/stdout;
+  tests/e2e/lsp_session_test.go — TestLspScriptedSession
+  launches `fuse lsp` as a subprocess and plays initialize
+  → didOpen → hover → goto → completion → documentSymbol →
+  shutdown → exit against the scripted client) —
+  confirmed retired by `go test ./compiler/lsp/... -v`,
+  `go test ./compiler/lsp/... -run TestLspInitialize -v`,
+  `go test ./compiler/lsp/... -run TestLspDiagnosticsStream
+  -v`, `go test ./compiler/lsp/... -run TestLspHover -v`,
+  `go test ./compiler/lsp/... -run TestLspGotoDefinition
+  -v`, `go test ./compiler/lsp/... -run TestLspCompletion
+  -v`, `go test ./compiler/lsp/... -run TestLspDocumentSymbols
+  -v`, `go test ./compiler/lsp/... -run TestLspSemanticTokens
+  -v`, and `go test ./tests/e2e/... -run
+  TestLspScriptedSession -v` — all exit 0. Proof surface:
+  TestLspTransport covers frame roundtrip + malformed-header
+  rejection + EOF propagation; TestLspInitialize asserts
+  every advertised capability is wired (HoverProvider,
+  DefinitionProvider, CompletionProvider with `.` / `::`
+  triggers, DocumentSymbol + WorkspaceSymbol, SemanticTokens
+  legend, CodeAction); TestLspDocSync exercises open / change
+  / close and version-stamp semantics; TestLspDiagnosticsStream
+  publishes diagnostics for a malformed source without a
+  request; TestLspQuickFixes synthesises a diagnostic with
+  `hint:` and receives a CodeAction whose WorkspaceEdit
+  substitutes the suggestion text; TestLspHover returns a
+  markdown blob with kind + doc comment for items and the
+  resolved type for let-bindings; TestLspGotoDefinition
+  navigates from a call site to the declaration line;
+  TestLspDocumentSymbols returns every fn / struct / enum /
+  const with the matching LSP SymbolKind; TestLspCompletion
+  merges keywords + declared items + identifiers in source
+  with deterministic ordering; TestLspSemanticTokens
+  produces a 5-tuple-aligned packed stream containing at
+  least one keyword and one type token; TestLspScriptedSession
+  drives the stdio transport end-to-end with a 5-second
+  per-request deadline.
 
 Rescheduled: (none this wave)

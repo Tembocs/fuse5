@@ -3506,3 +3506,102 @@ CC=gcc go test ./...
 All commands exited 0 on this machine (windows/amd64,
 MinGW-W64 gcc 15.x, go1.22+). CI matrix green on the
 committed SHA is the authoritative record.
+
+### WC019 — Wave 19 Closure
+
+Date: 2026-04-18
+Wave: 19 — Language Server
+
+**Proof programs added this wave**:
+- `tests/e2e/lsp_session_test.go` — TestLspScriptedSession
+  launches `fuse lsp` as a subprocess and drives initialize
+  → didOpen → hover → goto → completion → documentSymbol →
+  shutdown → exit. The scripted-client decodes Result as
+  `json.RawMessage` so map- and array-shaped results
+  round-trip through the same path. Per-request deadline
+  5s; total runtime ~1.2s on the local host.
+
+**Stubs retired this wave**:
+- "Language server (LSP 3.17)" — removed from `STUBS.md`
+  Active table at this PCL commit. Confirmed by
+  `go run tools/checkstubs/main.go -wave W19` and
+  `go run tools/checkstubs/main.go -history-current-wave W19`
+  — both exit 0.
+
+**Stubs introduced this wave**:
+None. W20 stdlib core and downstream rows unchanged.
+
+**What was harder than planned**:
+- The scripted-client's response decoder initially typed
+  Result as `map[string]any`. That worked for hover and
+  completion but rejected goto-definition's `[]Location`
+  result, silently dropping the frame and hanging the
+  test. Fix: `Result json.RawMessage` + a path-walker
+  helper that re-decodes into `any`. The pattern covers
+  every LSP shape without special-casing.
+- LSP 3.17 Position.character is spec'd as UTF-16 code
+  units; W19 treats it as bytes. Fuse source is ASCII-
+  dominant so nothing breaks; W22 stdlib-hosted strings
+  is the right moment to plumb UTF-16 width through
+  because that's when string types become first-class.
+- computeDiagnostics runs only lex + parse at W19. resolve
+  and check currently assume well-formed programs and emit
+  oddly-shaped diagnostics on partial input. Extending the
+  pipeline is a W20 task once stdlib core has stabilised
+  the checker's trait-impl surface.
+- Hover / goto resolve through `doc.Extract` (line-based)
+  rather than the real resolver. Fast, crash-safe on
+  partial input, but single-document. Cross-file navigation
+  depends on the W23 persistent module graph.
+- Semantic tokens use a regex classifier — operators and
+  strings are not classified. The real lexer would handle
+  them but hasn't been audited for on-partial-input
+  stability. W22 swap.
+
+**What the next wave must know**:
+- `lsp.Server` is the single state owner; dispatch is
+  serial. W20 can parallelise via a request queue; LSP
+  permits single-threaded handling so the simpler shape
+  ships first.
+- `lsp.NewTransport(r, w)` is reusable. Any tool speaking
+  LSP over pipes uses it without depending on Server.
+- `lsp.DocStore` is in-memory only. A disk-backed
+  implementation can replace it without callers changing.
+- `handleCodeAction` surfaces diagnostics containing
+  `hint:` as quick-fixes. The real Rule 6.17 path gives
+  each compiler diagnostic a `Hint` field — wire it
+  through the LSP Diagnostic shape (currently dropped) in
+  W20 when stdlib core is the first consumer.
+- Advertising a new capability: declare types in types.go,
+  wire `server.dispatch`, add a Test*, list it in
+  `handleInitialize`'s `ServerCapabilities`. Never advertise
+  ahead of the handler — clients call advertised methods.
+- `fuse lsp` exits on the client's `exit` notification.
+  Editor integrations spawn per-workspace.
+- Scripted-session test per-request deadline is 5s. A hang
+  means a server bug that holds stdin without replying —
+  the test fails fast rather than hanging CI.
+- `lsp.semanticTokenTypes()` is the legend source-of-truth.
+  W20 can append new types (the index = token-type integer
+  in the packed stream).
+
+**Verification**:
+```
+go test ./compiler/lsp/... -v
+go test ./compiler/lsp/... -run TestLspInitialize -v
+go test ./compiler/lsp/... -run TestLspDiagnosticsStream -v
+go test ./compiler/lsp/... -run TestLspHover -v
+go test ./compiler/lsp/... -run TestLspGotoDefinition -v
+go test ./compiler/lsp/... -run TestLspCompletion -v
+go test ./compiler/lsp/... -run TestLspDocumentSymbols -v
+go test ./compiler/lsp/... -run TestLspSemanticTokens -v
+go test ./tests/e2e/... -run TestLspScriptedSession -v
+go run tools/checkstubs/main.go -wave W19 -phase P00
+go run tools/checkstubs/main.go -wave W19
+go run tools/checkstubs/main.go -history-current-wave W19
+grep "WC019" docs/learning-log.md
+CC=gcc go test ./...
+```
+All commands exited 0 on this machine (windows/amd64,
+MinGW-W64 gcc 15.x, go1.22+). CI matrix green on the
+committed SHA is the authoritative record.
