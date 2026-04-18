@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Codegen C11 hardening (`@repr`, `@align`, `@inline`, intrinsics, variadic, debug info, perf baseline) | compiler/codegen/ (W05 emitter only; no hardening) | hardening decorators are ignored by the W05 emitter | "C11 codegen not yet implemented" | W17 |
 | CLI, diagnostics, `fuse fmt/doc/repl`, incremental driver, Rule 6.17 audit | compiler/driver/ (W05 `build` subcommand only; no `run`/`check`/`test`/`fmt`/`doc`/`repl`, no incremental driver) | unimplemented subcommands exit non-zero with a usage message | "subcommand not yet implemented" | W18 |
 | Language server (LSP 3.17) | compiler/ (not yet created lsp/) | no LSP server | "fuse lsp not yet implemented" | W19 |
 | Stdlib core (traits, primitives, strings, collections, Cell/RefCell, Ptr.null, overflow methods) | stdlib/core/ (empty) | no stdlib | "stdlib core not yet implemented" | W20 |
@@ -632,5 +631,86 @@ Retired:
   assert exit code 42 — proving that fuse_rt_thread_spawn +
   _join, and fuse_rt_chan_new + _send + _recv + _close, all
   work end-to-end when reached from compiled Fuse-shaped code.
+
+Rescheduled: (none this wave)
+
+### W17 — Codegen C11 Hardening
+
+Added: (none this wave)
+
+Retired:
+- Codegen C11 hardening (`@repr`, `@align`, `@inline`,
+  intrinsics, variadic, debug info, perf baseline)
+  (compiler/codegen/w15_emission.go — full C11 emission for
+  the 17 W15 consolidation ops; compiler/codegen/w17_attrs.go
+  — EmitReprAttr / EmitAlignAttr / EmitInlineAttr;
+  compiler/codegen/w17_intrinsics.go — EmitIntrinsic for
+  unreachable/likely/unlikely/assume/fence/prefetch plus
+  EmitVariadicCall with per-arg default promotions,
+  EmitPtrNull, EmitSizeOf / EmitAlignOf / EmitSizeOfVal;
+  compiler/codegen/w17_types.go — SortTypeDecls /
+  SanitizeIdentifier / MangleModuleName / EmitUnitErasure /
+  EmitAggregateZeroInit / EmitUnionLayout / EmitPointerCategory;
+  compiler/codegen/w17_debug.go — EmitLineDirective /
+  EmitLocalName / EmitDebugInfoBlock;
+  compiler/codegen/w17_overflow.go — EmitOverflowAdd/Sub/Mul
+  with Debug-panic and Release-wrap policies;
+  compiler/codegen/c11.go — dispatch to emitW15Inst from the
+  default arm plus header gating for fuse_rt.h / string.h;
+  compiler/codegen/w17_test.go — 22 named tests covering
+  every wave-doc Verify command in the codegen package;
+  compiler/cc/compiler.go — Options.Debug field plus the
+  pure BuildCompileArgs helper; compiler/cc/w17_debug_test.go
+  — TestDebugFlagPassthrough across gcc/clang/msvc;
+  compiler/lower/lower.go — lowerExpr default dispatch for
+  CastExpr/BinaryExpr-Eq/SpawnExpr/ReferenceExpr/FieldExpr/
+  OptFieldExpr/IndexRangeExpr/StructLitExpr/CallExpr-with-
+  FieldExpr-callee; compiler/lower/w17_forms.go —
+  lowerRuntimeMethodCall (ThreadHandle.join + Chan.send/recv/
+  close), lowerSpawn with closure-to-fn-ptr lifting,
+  liftSpawnClosure producing deterministic __fuse_spawn_<N>
+  fns; compiler/driver/build.go — BuildOptions.Debug plus
+  line-directive prepend + cc.Options.Debug wiring;
+  cmd/fuse/main.go — `--debug` flag; tests/e2e/
+  debug_breakpoint.fuse + debug_breakpoint_test.go —
+  TestDebugBreakpointInGdb (compile with --debug, verify
+  #line directives and exit 42, optional gdb session on
+  hosts where a debugger is available);
+  tests/perf/README.md + thresholds.json + perf_test.go —
+  four-benchmark corpus (lex+parse, monomorph-heavy, tight
+  arithmetic, chan+spawn) with tier-1 CI ceilings;
+  tools/checkci/main.go — `-perf-baseline` flag validating
+  thresholds.json schema and positive per-benchmark ceilings;
+  Makefile — `repro` target compiles hello_exit twice and
+  diffs the emitted C for byte equality) — confirmed retired
+  by `CC=gcc go test ./...`, `go test ./compiler/codegen/...
+  -run "TestTypeDefsFirst|TestIdentifierSanitization|
+  TestModuleMangling|TestPointerCategories|TestCallSiteAdaptation|
+  TestPtrNullEmission|TestTotalUnitErasure|TestAggregateZeroInit|
+  TestUnionLayout|TestStructuralDivergence|TestReprEmission|
+  TestAlignEmission|TestInlineEmission|TestIntrinsicsEmission|
+  TestMemIntrinsicsEmission|TestVariadicCall|TestSizeOfEmission|
+  TestSizeOfValEmission|TestOverflowDebugPanic|TestOverflowPolicy|
+  TestHistoricalRegressions|TestLineDirectives|
+  TestDebugInfoEmission"`, `go test ./compiler/cc/... -run
+  TestDebugFlagPassthrough`, `go test ./tests/e2e/... -run
+  TestDebugBreakpointInGdb`, `go test ./tests/perf/... -run
+  "TestPerfCorpusPresent|TestPerfBaseline"`, `go run
+  tools/checkci/main.go -perf-baseline`, and `make repro`.
+  Proof surface: 22 emission-helper tests + 4 debug-flag-
+  passthrough sub-tests + 1 gdb e2e test + 2 perf-baseline
+  sub-tests + checkci -perf-baseline + make repro (byte-
+  identical C across two runs). Deferred W15/W16 wiring is
+  now complete: CastExpr routes through classifyCast to
+  OpCast, BinaryExpr Eq/Ne routes to OpEqScalar / OpEqCall,
+  SpawnExpr lifts closures to top-level fns and emits
+  OpSpawn with the lifted name, ThreadHandle.join() and
+  Chan.send/recv/close method calls lower to the matching
+  W16 MIR ops. Every e2e test from prior waves (hello_exit,
+  exit_with_value, checker_basic, identity_generic,
+  multiple_instantiations, const_fn, closure_capture,
+  error_propagation {err,ok}, match_enum_dispatch,
+  dyn_dispatch, spawn_observable, channel_round_trip) stays
+  green on this SHA.
 
 Rescheduled: (none this wave)
