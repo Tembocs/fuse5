@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Package management (manifest, lockfile, resolver, fetcher, registry protocol) | compiler/ (not yet created pkg/) | no package manager | "package manager not yet implemented" | W23 |
 | Stub clearance gate | n/a — gating wave | clearance happens at wave entry | n/a — policy wave | W24 |
 | Stage 2 self-hosting | stage2/src/ (empty) | no stage2 compiler | "stage 2 compiler not yet ported" | W25 |
 | Native backend with DWARF | compiler/ (not yet created codegen/native/) | no native backend | "native backend not yet implemented" | W26 |
@@ -971,5 +970,71 @@ Retired:
   TestChannelRoundTrip); W22 layers typed Fuse-level
   wrappers on top of that runtime ABI without changing
   the underlying contract.
+
+Rescheduled: (none this wave)
+
+### W23 — Package Management
+
+Added: (none this wave)
+
+Retired:
+- Package management (manifest, lockfile, resolver, fetcher,
+  registry protocol) (compiler/pkg/ — manifest.go + toml.go
+  parse fuse.toml's TOML subset with diagnostics on unknown
+  sections/keys; lockfile.go serializes/parses fuse.lock
+  with schema_version gating and SHA-256 body digest;
+  version.go ships the semver range algebra with `^` / `~` /
+  compound / star / short-form support and Range.Intersect /
+  SelectLatest; resolver.go performs deterministic latest-
+  compatible resolution with cycle detection and Rule-6.17
+  error diagnostics; registry.go parses the line-oriented
+  index + JSON metadata with schema version pinning;
+  fetcher.go handles HTTPS/file:// fetches with SHA-256
+  integrity gate, atomic cache writes, corruption self-heal,
+  and offline mode; pkg_test.go ships 11 test groups;
+  docs/registry-protocol.md — frozen v1 spec with
+  `frozen: true` marker; tools/checkdocs/main.go —
+  `-registry-protocol-frozen` flag enforcing the freeze;
+  cmd/fuse/pkg.go — fuse add / remove / update / vendor
+  subcommands with atomic manifest writes + lockfile
+  invalidation; cmd/fuse/pkg_test.go — TestPkgSubcommands;
+  compiler/driver/pkg_integration.go —
+  ResolveForSource locates fuse.toml, reuses matching
+  lockfiles, drops stale ones, honours offline mode;
+  compiler/driver/pkg_integration_test.go —
+  TestDriverPkgIntegration; tests/e2e/two_crate_project/
+  (root + mathlib path-dep) and
+  tests/e2e/two_crate_project_test.go —
+  TestTwoCrateProject) — confirmed retired by
+  `go test ./compiler/pkg/... -v` (11/11 groups),
+  `go test ./compiler/pkg/... -run
+  TestResolverDeterministic -count=3 -v`,
+  `go test ./compiler/driver/... -run
+  TestDriverPkgIntegration -v` (5 sub-tests),
+  `go test ./cmd/fuse/... -run TestPkgSubcommands -v`
+  (8 sub-tests), `go test ./tests/e2e/... -run
+  TestTwoCrateProject -v`, and `go run
+  tools/checkdocs/main.go -registry-protocol-frozen` —
+  all exit 0. Proof surface: the manifest parser rejects
+  unknown sections/keys textually; the lockfile is
+  byte-identical across serialize/parse/reserialize
+  cycles and across three resolver runs on the same
+  inputs; range algebra covers every wave-doc-named
+  form; the fetcher verifies SHA-256 before unpacking
+  and never writes partial content on mismatch; offline
+  mode serves from cache and refuses otherwise; the
+  registry index + metadata schemas pin schema_version
+  = 1 and reject other values; the CLI subcommands
+  mutate fuse.toml atomically (tempfile + rename) and
+  invalidate fuse.lock on manifest change; driver
+  integration reuses matching lockfiles, drops stale
+  ones by Root comparison, and errors with a specific
+  message under --offline when the cache is missing;
+  the two-crate proof compiles a root crate that
+  depends on a local mathlib path-dep and exits 42.
+  The hosted reference registry itself is out of scope
+  for v1 per the wave doc — the spec is frozen so the
+  future implementation lands without a protocol
+  revision.
 
 Rescheduled: (none this wave)

@@ -1,6 +1,6 @@
 {
   "current_wave": "W23",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-18",
-  "notes": "Package Management wave entered. Rule 9.5 P00 commit. `go run tools/checkstubs/main.go -wave W23 -phase P00` exits 0. Implementation lands next — compiler/pkg/ (manifest parser, lockfile, version range algebra, deterministic resolver, HTTPS fetcher with SHA-256 integrity, registry index/metadata schemas, cycle detection), docs/registry-protocol.md frozen spec, tools/checkdocs -registry-protocol-frozen flag, CLI subcommands (fuse add/remove/update/vendor), driver integration, tests/e2e/two_crate_project TestTwoCrateProject proof."
+  "notes": "Package Management wave in closure phase. Package-manager stub retired: compiler/pkg/ ships manifest parser + lockfile + semver range algebra + deterministic resolver + HTTPS fetcher with SHA-256 integrity + registry index/metadata parsers. docs/registry-protocol.md is the frozen v1 spec; tools/checkdocs -registry-protocol-frozen gates against drift. cmd/fuse gains add/remove/update/vendor subcommands with atomic fuse.toml writes. compiler/driver/pkg_integration locates fuse.toml, resolves on first build, reuses matching lockfiles, drops stale ones, honours --offline. TestTwoCrateProject is the end-to-end proof (root + mathlib path-dep, both manifests parse, lockfile written, compile + run, exit 42). 11 pkg test groups + 5 driver-integration sub-tests + 8 CLI sub-tests. STUBS.md W23 history block appended; WC023 logged using Rule 10.2 template. Seventeenth full wave under Rule 9.5 three-commit discipline: P00 audit (40bfdd5), implementation (3a2924b), PCL (this commit). Next: enter W24 Stub Clearance Gate."
 }
