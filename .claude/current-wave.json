@@ -1,6 +1,6 @@
 {
   "current_wave": "W21",
-  "current_phase": "P00",
+  "current_phase": "PCL",
   "updated": "2026-04-18",
-  "notes": "Custom Allocators wave entered. Rule 9.5 P00 commit. `go run tools/checkstubs/main.go -wave W21 -phase P00` and `-wave W21` both exit 0. Implementation lands next — stdlib/core/alloc/ (Allocator trait + SystemAllocator wrapper + BumpAllocator + GlobalAlloc override), allocator-parameterised collections (Vec / HashMap / Box), tests/e2e/bump_allocator.fuse proof + TestBumpAllocatorProof, plus Go tests TestAllocatorTrait / TestGlobalAllocator / TestCollectionsInAllocator."
+  "notes": "Custom Allocators wave in closure phase. Allocator stub retired: stdlib/core/alloc/ ships 7 Fuse source files (allocator trait, system default, bump reference impl, global override hooks, Vec[T,A] / Box[T,A] / HashMap[K,V,A] collections) with /// doc coverage. Every allocator-aware collection stores alloc: A alongside ptr/len/cap so dealloc always routes to the owning allocator (Rule 6.9). TestAllocatorTrait / TestGlobalAllocator / TestCollectionsInAllocator / TestBumpAllocatorProof cover the structural + runtime-observable contracts. STUBS.md W21 history block appended; WC021 logged using Rule 10.2 template. Fifteenth full wave under Rule 9.5 three-commit discipline: P00 audit (251eaa9), implementation (a24d2a9), PCL (this commit). Next: enter W22 Stdlib Hosted."
 }

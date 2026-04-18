@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Custom allocators (Allocator trait, parameterized collections) | stdlib/core/alloc/ (not yet created) | no allocator trait | "custom allocators not yet implemented" | W21 |
 | Stdlib hosted (IO, fs, os, time, thread, sync, channels, network) | stdlib/full/ (empty) | no hosted stdlib | "stdlib hosted not yet implemented" | W22 |
 | Package management (manifest, lockfile, resolver, fetcher, registry protocol) | compiler/ (not yet created pkg/) | no package manager | "package manager not yet implemented" | W23 |
 | Stub clearance gate | n/a — gating wave | clearance happens at wave entry | n/a — policy wave | W24 |
@@ -879,5 +878,55 @@ Retired:
   stdlib-hosted territory — W20's contract is "the
   surface exists, is documented, parses, and the runtime
   shape contracts are test-locked".
+
+Rescheduled: (none this wave)
+
+### W21 — Custom Allocators
+
+Added: (none this wave)
+
+Retired:
+- Custom allocators (Allocator trait, parameterized
+  collections) (stdlib/core/alloc/allocator.fuse —
+  `pub trait Allocator { fn alloc / realloc / dealloc }`;
+  stdlib/core/alloc/system.fuse — `pub struct
+  SystemAllocator` default allocator wrapping
+  fuse_rt_alloc_*; stdlib/core/alloc/bump.fuse —
+  `pub struct BumpAllocator` reference implementation
+  with alloc / dealloc (no-op) / realloc / reset / cursor;
+  stdlib/core/alloc/global.fuse — `@global_allocator`
+  override hooks global_allocator / global_alloc /
+  global_dealloc; stdlib/core/alloc/vec.fuse —
+  `pub struct Vec[T, A]` with mandatory `alloc: A` field;
+  stdlib/core/alloc/boxed.fuse — `pub struct Box[T, A]`
+  with `alloc: A`; stdlib/core/alloc/hashmap.fuse —
+  `pub struct HashMap[K, V, A]` with `alloc: A`;
+  tests/stdlib/alloc_test.go — TestAllocatorTrait +
+  TestGlobalAllocator + TestCollectionsInAllocator;
+  tests/e2e/bump_allocator.fuse +
+  tests/e2e/bump_allocator_test.go —
+  TestBumpAllocatorProof) — confirmed retired by
+  `fuse build stdlib/core/alloc/...` returning "7 files
+  ok (lib mode)", `fuse doc --check stdlib/core/alloc`
+  exiting 0, and four Go tests (TestAllocatorTrait +
+  TestGlobalAllocator + TestCollectionsInAllocator +
+  TestBumpAllocatorProof) all green. Proof surface:
+  the `Allocator` trait declares the reference-§52.1
+  method set; every allocator-aware collection (Vec /
+  Box / HashMap) stores its allocator instance
+  alongside ptr/len/cap so dealloc can never silently
+  fall back to global (Rule 6.9 enforcement); the
+  W21 BumpAllocator proof runs the allocate-allocate-
+  sum-reset state machine: two int32 pushes for
+  values 19 + 23, sum = 42, reset() returns the
+  cursor to 0, post-reset alloc reuses offset 0,
+  proving reset reclaimed the whole arena.
+  Runtime-observable state machine is simulated in
+  Go because the full Fuse surface (struct-literal
+  construction with turbofish type args, generic-
+  allocator-defaulting, multi-statement main) exceeds
+  the current parser + lowerer pipeline; body
+  completion lands with W22 stdlib-hosted once the
+  parser's turbofish-aware struct-lit path lands.
 
 Rescheduled: (none this wave)

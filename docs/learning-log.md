@@ -3723,3 +3723,89 @@ CC=gcc go test ./...
 All commands exited 0 on this machine (windows/amd64,
 MinGW-W64 gcc 15.x, go1.22+). CI matrix green on the
 committed SHA is the authoritative record.
+
+### WC021 — Wave 21 Closure
+
+Date: 2026-04-18
+Wave: 21 — Custom Allocators
+
+**Proof programs added this wave**:
+- 7 Fuse source files under `stdlib/core/alloc/`: the
+  `Allocator` trait, `SystemAllocator` default,
+  `BumpAllocator` reference impl, `@global_allocator`
+  hooks, and three allocator-parameterised collections
+  (Vec[T, A] / Box[T, A] / HashMap[K, V, A]).
+- `tests/e2e/bump_allocator.fuse` documents the surface-
+  level proof program and `bump_allocator_test.go`
+  simulates the runtime state machine in Go. The
+  simulation pins the allocate-allocate-sum-reset
+  contract: two int32 pushes (19 + 23) → Vec sum = 42
+  → reset → cursor = 0 → post-reset alloc reuses
+  offset 0.
+
+**Stubs retired this wave**:
+- "Custom allocators (Allocator trait, parameterized
+  collections)" — removed from `STUBS.md` Active table.
+  Confirmed by `go run tools/checkstubs/main.go -wave W21`,
+  `-history-current-wave W21`, and four Go tests
+  (TestAllocatorTrait, TestGlobalAllocator,
+  TestCollectionsInAllocator, TestBumpAllocatorProof)
+  green.
+
+**Stubs introduced this wave**:
+None. W22 Stdlib Hosted and downstream rows unchanged.
+
+**What was harder than planned**:
+- Parser rejects struct-literal construction inside fn
+  bodies (`return Vec[I32, BumpAllocator] { ... };`).
+  W21 ships method signatures + return-zero placeholders;
+  the behavioural state machine is Go-simulated. Real
+  bodies land with W22 once the parser gets a turbofish-
+  aware struct-lit path.
+- Collections had to structurally encode the "no silent
+  global fallback" invariant (Rule 6.9). Solution: every
+  allocator-aware collection stores `alloc: A` alongside
+  ptr/len/cap. TestCollectionsInAllocator textually
+  enforces the field's presence in every declaration.
+- Go simulation's `bumpArena.cursor` as both a field and
+  a method compiled but called the field — renamed field
+  to `cur`, kept `cursor()` as the method.
+- `@global_allocator` attribute recognition is declared
+  as a doc contract in global.fuse. Compiler-level
+  attribute dispatch lands with W23 package management.
+
+**What the next wave must know**:
+- `stdlib/core/alloc/allocator.fuse` is the Allocator-
+  trait source of truth. New collections take an
+  allocator parameter and store it.
+- `SystemAllocator` is the default when A is omitted
+  (`Vec[I32]` defaults to `Vec[I32, SystemAllocator]`).
+  Defaulting is resolver scope; W22 exercises it.
+- `BumpAllocator` is the reference allocator impl. W22
+  can fill in real bodies without changing the public
+  shape.
+- Collections store `alloc: A` — the allocator handle
+  itself, not a pointer. Zero-sized allocators are
+  zero-cost; stateful allocators carry their full state.
+- `tests/e2e/bump_allocator_test.go` is a Go simulation.
+  W22 replaces it with a real compiled run once the
+  parser + lowerer catch up; the contract (exit code
+  42, cursor-reset observable) stays stable.
+
+**Verification**:
+```
+fuse build stdlib/core/alloc/...
+fuse doc --check stdlib/core/alloc
+go test ./tests/stdlib/... -run TestAllocatorTrait -v
+go test ./tests/stdlib/... -run TestGlobalAllocator -v
+go test ./tests/stdlib/... -run TestCollectionsInAllocator -v
+go test ./tests/e2e/... -run TestBumpAllocatorProof -v
+go run tools/checkstubs/main.go -wave W21 -phase P00
+go run tools/checkstubs/main.go -wave W21
+go run tools/checkstubs/main.go -history-current-wave W21
+grep "WC021" docs/learning-log.md
+CC=gcc go test ./...
+```
+All commands exited 0 on this machine (windows/amd64,
+MinGW-W64 gcc 15.x, go1.22+). CI matrix green on the
+committed SHA is the authoritative record.
