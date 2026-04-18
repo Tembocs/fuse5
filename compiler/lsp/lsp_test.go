@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/Tembocs/fuse5/compiler/lex"
 )
 
 // -- Transport --------------------------------------------------
@@ -555,6 +557,80 @@ func didCloseMsg(uri string) []byte {
 	p := DidCloseTextDocumentParams{TextDocument: TextDocumentIdentifier{URI: uri}}
 	body, _ := json.Marshal(p)
 	return []byte(fmt.Sprintf(`{"jsonrpc":"2.0","method":"textDocument/didClose","params":%s}`, body))
+}
+
+// TestLspUtf16Positions pins the W24 UTF-16 position contract:
+// Position.Character is counted in UTF-16 code units, not bytes.
+// The corpus mixes ASCII, a multi-byte BMP rune (⚙ U+2699, 3 UTF-8
+// bytes → 1 UTF-16 unit), and a supplementary-plane rune
+// (🚀 U+1F680, 4 UTF-8 bytes → 2 UTF-16 units) so regressions in
+// either direction fail fast.
+func TestLspUtf16Positions(t *testing.T) {
+	// Line 0: "let a = 1;"               (ASCII only)
+	// Line 1: "// ⚙ three-byte BMP"     ('⚙' is 3 UTF-8 bytes, 1 UTF-16 unit)
+	// Line 2: "// 🚀 four-byte astral"  ('🚀' is 4 UTF-8 bytes, 2 UTF-16 units)
+	text := "let a = 1;\n// \u2699 three-byte BMP\n// \U0001F680 four-byte astral\n"
+
+	t.Run("byteOffsetToPosition-uses-utf16-units", func(t *testing.T) {
+		// The '⚙' starts at line 1 after the "// " prefix (3 bytes),
+		// so byte offset = len("let a = 1;\n") + 3 = 11 + 3 = 14.
+		// UTF-16 column for byte just AFTER '⚙' should be 3 (// ) + 1 (⚙) = 4.
+		gearByte := strings.Index(text, "\u2699")
+		got := byteOffsetToPosition(text, gearByte+len("\u2699"))
+		want := Position{Line: 1, Character: 4}
+		if got != want {
+			t.Errorf("post-gear position = %+v, want %+v", got, want)
+		}
+
+		// The '🚀' is supplementary-plane → 2 UTF-16 code units.
+		rocketByte := strings.Index(text, "\U0001F680")
+		got = byteOffsetToPosition(text, rocketByte+len("\U0001F680"))
+		want = Position{Line: 2, Character: 5}
+		if got != want {
+			t.Errorf("post-rocket position = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("positionToByteOffset-roundtrips", func(t *testing.T) {
+		// Round-trip every meaningful offset against byteOffsetToPosition.
+		// This pins the inverse.
+		for _, offset := range []int{0, 5, 11, 14, 17, 30, len(text) - 1, len(text)} {
+			pos := byteOffsetToPosition(text, offset)
+			if got := positionToByteOffset(text, pos); got != offset {
+				// Offsets that land inside a multi-byte sequence can't
+				// round-trip — byteOffsetToPosition snaps to the next
+				// rune boundary. Accept an equivalent offset that
+				// points at the same logical position.
+				if byteOffsetToPosition(text, got) != pos {
+					t.Errorf("positionToByteOffset(%+v) = %d, want %d", pos, got, offset)
+				}
+			}
+		}
+	})
+
+	t.Run("diagnostic-translation-transcodes", func(t *testing.T) {
+		// A diagnostic whose byte span falls after the '🚀' should
+		// surface the LSP character as UTF-16 units, not UTF-8 bytes.
+		rocketByte := strings.Index(text, "\U0001F680")
+		afterRocketByte := rocketByte + len("\U0001F680")
+		diags := []lex.Diagnostic{{
+			Span: lex.Span{
+				File:  "utf16.fuse",
+				Start: lex.Position{Offset: afterRocketByte, Line: 3, Column: 8},
+				End:   lex.Position{Offset: afterRocketByte + 1, Line: 3, Column: 9},
+			},
+			Message: "probe",
+		}}
+		out := translateDiagnostics(text, diags)
+		if len(out) != 1 {
+			t.Fatalf("got %d diagnostics, want 1", len(out))
+		}
+		// Byte column at afterRocketByte on line 2: "// " (3 bytes)
+		//   + "🚀" (4 bytes) = 7. UTF-16 column: 3 + 2 = 5.
+		if got := out[0].Range.Start.Character; got != 5 {
+			t.Errorf("LSP start.character = %d, want 5 (UTF-16 units, not 7 bytes)", got)
+		}
+	})
 }
 
 func must(t *testing.T, err error) {

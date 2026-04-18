@@ -16,7 +16,7 @@ func (b *Builder) Cast(src Reg, mode CastMode) Reg {
 		panic("mir.Builder.Cast: CastInvalid — classify before emitting")
 	}
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpCast, Dst: dst, Lhs: src, Mode: int(mode),
 	})
 	return dst
@@ -25,7 +25,7 @@ func (b *Builder) Cast(src Reg, mode CastMode) Reg {
 // Borrow emits `Dst = &Lhs` (or `&mut Lhs` when mutable is true).
 func (b *Builder) Borrow(target Reg, mutable bool) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpBorrow, Dst: dst, Lhs: target, Flag: mutable,
 	})
 	return dst
@@ -38,7 +38,7 @@ func (b *Builder) FnPtr(callName string) Reg {
 		panic("mir.Builder.FnPtr: empty callName")
 	}
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpFnPtr, Dst: dst, CallName: callName,
 	})
 	return dst
@@ -50,7 +50,7 @@ func (b *Builder) CallIndirect(fnReg Reg, args []Reg) Reg {
 	dst := b.NewReg()
 	cloned := make([]Reg, len(args))
 	copy(cloned, args)
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpCallIndirect, Dst: dst, Lhs: fnReg, CallArgs: cloned,
 	})
 	return dst
@@ -61,7 +61,7 @@ func (b *Builder) CallIndirect(fnReg Reg, args []Reg) Reg {
 // may be NoReg for open-ended endpoints; the validator permits that.
 func (b *Builder) SliceNew(base, low, high Reg, inclusive bool) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpSliceNew, Dst: dst, Lhs: base, Rhs: low, Extra: high, Flag: inclusive,
 	})
 	return dst
@@ -73,7 +73,7 @@ func (b *Builder) FieldRead(base Reg, name string) Reg {
 		panic("mir.Builder.FieldRead: empty field name")
 	}
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpFieldRead, Dst: dst, Lhs: base, FieldName: name,
 	})
 	return dst
@@ -90,7 +90,7 @@ func (b *Builder) StructNew(typeName string, fields []StructField) Reg {
 	dst := b.NewReg()
 	cloned := make([]StructField, len(fields))
 	copy(cloned, fields)
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpStructNew, Dst: dst, CallName: typeName, Fields: cloned,
 	})
 	return dst
@@ -101,7 +101,7 @@ func (b *Builder) StructNew(typeName string, fields []StructField) Reg {
 // (the `..base` update form, reference §45.1).
 func (b *Builder) StructCopy(base Reg) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpStructCopy, Dst: dst, Lhs: base,
 	})
 	return dst
@@ -112,7 +112,7 @@ func (b *Builder) FieldWrite(target Reg, name string, value Reg) {
 	if name == "" {
 		panic("mir.Builder.FieldWrite: empty field name")
 	}
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpFieldWrite, Lhs: target, Rhs: value, FieldName: name,
 	})
 }
@@ -128,7 +128,7 @@ func (b *Builder) MethodCall(methodName string, receiver Reg, args []Reg) Reg {
 	combined := make([]Reg, 0, len(args)+1)
 	combined = append(combined, receiver)
 	combined = append(combined, args...)
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpMethodCall, Dst: dst, CallName: methodName, CallArgs: combined,
 	})
 	return dst
@@ -137,7 +137,7 @@ func (b *Builder) MethodCall(methodName string, receiver Reg, args []Reg) Reg {
 // EqScalar computes `Dst = (Lhs == Rhs)` for primitive operands.
 func (b *Builder) EqScalar(lhs, rhs Reg) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpEqScalar, Dst: dst, Lhs: lhs, Rhs: rhs,
 	})
 	return dst
@@ -150,7 +150,7 @@ func (b *Builder) EqCall(eqName string, lhs, rhs Reg) Reg {
 		panic("mir.Builder.EqCall: empty eqName")
 	}
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpEqCall, Dst: dst, CallName: eqName, CallArgs: []Reg{lhs, rhs},
 	})
 	return dst
@@ -168,7 +168,7 @@ func (b *Builder) OverflowArith(op Op, lhs, rhs Reg) Reg {
 		panic(fmt.Sprintf("mir.Builder.OverflowArith: %s is not an overflow-policy op", op))
 	}
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: op, Dst: dst, Lhs: lhs, Rhs: rhs,
 	})
 	return dst

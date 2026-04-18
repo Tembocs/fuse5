@@ -161,6 +161,12 @@ type StaticDecl struct {
 	// SymID is the resolve.SymbolID (stored as int to avoid import
 	// cycles) that this static declares. Populated by the bridge.
 	SymID int
+	// GlobalAllocator is true iff the source item carried the
+	// `@global_allocator` decorator (reference §46.3). The bridge
+	// validates placement on static items and rejects the attribute
+	// with arguments; the checker enforces "at most one per program"
+	// (W24 recognition; W26 wires the runtime dispatch).
+	GlobalAllocator bool
 }
 
 func (s *StaticDecl) itemNode() {}

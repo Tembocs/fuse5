@@ -163,6 +163,16 @@ type Inst struct {
 	Extra     Reg         // OpSliceNew: high register (base+low+high+inclusive shape)
 	FieldName string      // OpFieldRead/OpFieldWrite/OpStructNew/OpMethodCall: field or method name
 	Fields    []StructField // OpStructNew/OpStructCopy: field value bookkeeping
+
+	// Line is the 1-based Fuse source line this instruction was
+	// lowered from. Zero means "inherit the current debug-line
+	// cursor from the previous instruction". Codegen emits a
+	// `#line N "source.fuse"` directive when Line changes between
+	// consecutive instructions, so gdb / lldb step over native
+	// instructions back to the originating Fuse statement. Plumbing
+	// a line number (rather than a full lex.Span) keeps the MIR
+	// surface compact; the filename is resolved by the driver.
+	Line int
 }
 
 // Terminator enumerates how a Block may end. Each Block has exactly
@@ -253,6 +263,42 @@ type Module struct {
 type Builder struct {
 	fn      *Function
 	current *Block
+	// line is the 1-based Fuse source line stamped on every new
+	// Inst. Populated by SetLine from the lowerer; codegen uses
+	// Inst.Line to emit per-statement `#line` directives when the
+	// driver's Debug flag is set.
+	line int
+}
+
+// SetLine records the current Fuse source line so subsequent
+// emitted instructions inherit it. Zero means "unknown"; the
+// codegen debug-directive emitter treats zero as "no change,
+// keep the previous cursor." Callers set this at the entry of a
+// statement or major sub-expression whose origin is known.
+func (b *Builder) SetLine(line int) {
+	if line < 0 {
+		line = 0
+	}
+	b.line = line
+}
+
+// stampLine writes b.line onto the most recently appended instruction.
+// Defensive: does nothing when no instruction has been emitted in the
+// current block.
+func (b *Builder) stampLine() {
+	if b.current == nil || len(b.current.Insts) == 0 {
+		return
+	}
+	b.current.Insts[len(b.current.Insts)-1].Line = b.line
+}
+
+// appendInst is the canonical Builder append path: it stamps the
+// current debug-line cursor onto the instruction and appends it to
+// the current block. All Builder primitives route through here so
+// Line propagation is centralised.
+func (b *Builder) appendInst(in Inst) {
+	in.Line = b.line
+	b.current.Insts = append(b.current.Insts, in)
 }
 
 // NewFunction constructs an empty Function with its first Block
@@ -286,7 +332,7 @@ func (b *Builder) NewReg() Reg {
 // register.
 func (b *Builder) ConstInt(value int64) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpConstInt, Dst: dst, IntValue: value,
 	})
 	return dst
@@ -302,7 +348,7 @@ func (b *Builder) Binary(op Op, lhs, rhs Reg) Reg {
 		panic(fmt.Sprintf("mir.Builder.Binary: %s is not a binary op", op))
 	}
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: op, Dst: dst, Lhs: lhs, Rhs: rhs,
 	})
 	return dst
@@ -323,7 +369,7 @@ func (b *Builder) Return(reg Reg) {
 // Function.NumParams counter. Returns the destination register.
 func (b *Builder) Param(index int) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpParam, Dst: dst, ParamIndex: index,
 	})
 	if index+1 > b.fn.NumParams {
@@ -339,7 +385,7 @@ func (b *Builder) Call(callName string, args []Reg) Reg {
 	dst := b.NewReg()
 	cloned := make([]Reg, len(args))
 	copy(cloned, args)
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpCall, Dst: dst, CallName: callName, CallArgs: cloned,
 	})
 	return dst
@@ -350,7 +396,7 @@ func (b *Builder) Call(callName string, args []Reg) Reg {
 // `impl Drop`. The destructor is expected to take a pointer to the
 // dropped value, matching codegen's `TypeName_drop(&_lN)` form.
 func (b *Builder) Drop(dropName string, target Reg) {
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpDrop, Lhs: target, CallName: dropName,
 	})
 }

@@ -82,6 +82,26 @@ void *fuse_rt_realloc(void *ptr, int64_t old_bytes, int64_t new_bytes, int64_t a
  */
 void fuse_rt_free(void *ptr, int64_t bytes, int64_t align);
 
+/* -- Arithmetic overflow ----------------------------------------------- */
+
+/*
+ * fuse_rt_{add,sub,mul}_overflow_i64 compute a + b / a - b / a * b in
+ * signed 64-bit, store the (possibly-wrapped) result through `out`,
+ * and return 1 when the mathematical result overflows INT64 and 0
+ * otherwise. Semantics match __builtin_add_overflow / GCC / Clang
+ * intrinsics.
+ *
+ * Cross-compiler by construction: on GCC / Clang the .c implementation
+ * dispatches to the compiler builtin; on MSVC (and anything that
+ * defines _MSC_VER without __GNUC__) the implementation uses a
+ * portable pure-C branch-and-compare. Callers emitted by codegen do
+ * not have to care which host is in effect (W24 retires the MSVC
+ * overflow-fallback STUBS row).
+ */
+int32_t fuse_rt_add_overflow_i64(int64_t a, int64_t b, int64_t *out);
+int32_t fuse_rt_sub_overflow_i64(int64_t a, int64_t b, int64_t *out);
+int32_t fuse_rt_mul_overflow_i64(int64_t a, int64_t b, int64_t *out);
+
 /* -- IO ---------------------------------------------------------------- */
 
 /*

@@ -80,17 +80,17 @@ func runDownstreamPasses(srcs []*resolve.SourceFile) (rd, bd, cd []lex.Diagnosti
 // diagnostic collapses to a point span. Hints are concatenated into
 // Message as ` hint: <text>` so the existing code-action extractor
 // at handlers.go can parse them out without a schema change.
+//
+// Positions are emitted as (line, UTF-16 code-unit) pairs per LSP
+// 3.17 §3.17/PositionEncodingKind. The lexer's byte-offset absolute
+// positions are routed through byteOffsetToPosition so multi-byte
+// UTF-8 runes (non-ASCII identifiers, raw-string content) produce
+// correct editor highlights.
 func translateDiagnostics(text string, diags []lex.Diagnostic) []Diagnostic {
 	out := make([]Diagnostic, 0, len(diags))
 	for _, d := range diags {
-		start := Position{
-			Line:      max0(d.Span.Start.Line - 1),
-			Character: max0(d.Span.Start.Column - 1),
-		}
-		end := Position{
-			Line:      max0(d.Span.End.Line - 1),
-			Character: max0(d.Span.End.Column - 1),
-		}
+		start := byteOffsetToPosition(text, d.Span.Start.Offset)
+		end := byteOffsetToPosition(text, d.Span.End.Offset)
 		if end == start {
 			end.Character++
 		}
@@ -105,16 +105,6 @@ func translateDiagnostics(text string, diags []lex.Diagnostic) []Diagnostic {
 			Message:  msg,
 		})
 	}
-	_ = text // reserved for future offset-based fallback
 	return out
 }
 
-// max0 returns x when x ≥ 0, else 0. LSP positions are 0-indexed;
-// compiler positions are 1-indexed. Subtracting 1 must not
-// underflow when a diagnostic points at line 0 / column 0.
-func max0(x int) int {
-	if x < 0 {
-		return 0
-	}
-	return x
-}

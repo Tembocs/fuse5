@@ -189,15 +189,29 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 			names)
 	}
 
-	// Codegen. When Debug is set, the emitter prepends a #line
-	// directive pointing at the originating .fuse source so gdb
-	// / lldb can map native addresses back to Fuse lines.
-	cSource, err := codegen.EmitC11(mirMod)
-	if err != nil {
-		return nil, nil, fmt.Errorf("codegen: %w", err)
-	}
+	// Codegen. When Debug is set, the emitter inserts per-statement
+	// `#line N "source.fuse"` directives (W24 retirement) so gdb /
+	// lldb map every native instruction back to the Fuse source line
+	// that produced it, not just the top-of-file anchor.
+	var cSource string
 	if opts.Debug {
+		cSource, err = codegen.EmitC11WithOptions(mirMod, codegen.EmitOptions{
+			Debug:      true,
+			SourceFile: opts.Source,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("codegen: %w", err)
+		}
+		// Prepend a file-anchor directive so early code (pre-first-
+		// function content like includes and forward-decls) maps to
+		// line 1 of the Fuse source rather than the C stream's own
+		// coordinate space.
 		cSource = codegen.EmitLineDirective(1, opts.Source) + "\n" + cSource
+	} else {
+		cSource, err = codegen.EmitC11(mirMod)
+		if err != nil {
+			return nil, nil, fmt.Errorf("codegen: %w", err)
+		}
 	}
 
 	// Work directory.

@@ -79,6 +79,77 @@ func TestMinimalCodegenC(t *testing.T) {
 	})
 }
 
+// TestPerStatementLineDirectives pins the W24 retirement of the
+// "Compiler-emitted debug-line directives per MIR statement" stub.
+// When EmitOptions.Debug is true, the emitter inserts a
+// `#line N "source"` directive ahead of every MIR instruction whose
+// Line field differs from the preceding one. When Debug is false,
+// no `#line` directives appear. Determinism is preserved across
+// repeated emissions.
+func TestPerStatementLineDirectives(t *testing.T) {
+	mkModule := func() *mir.Module {
+		fn, b := mir.NewFunction("", "main")
+		b.SetLine(10)
+		a := b.ConstInt(1)
+		b.SetLine(11)
+		c := b.ConstInt(2)
+		b.SetLine(12)
+		sum := b.Binary(mir.OpAdd, a, c)
+		b.SetLine(13)
+		b.Return(sum)
+		return &mir.Module{Functions: []*mir.Function{fn}}
+	}
+
+	t.Run("debug-on-emits-per-stmt-directives", func(t *testing.T) {
+		out, err := EmitC11WithOptions(mkModule(), EmitOptions{
+			Debug:      true,
+			SourceFile: "proof.fuse",
+		})
+		if err != nil {
+			t.Fatalf("EmitC11WithOptions: %v", err)
+		}
+		for _, ln := range []string{
+			`#line 10 "proof.fuse"`,
+			`#line 11 "proof.fuse"`,
+			`#line 12 "proof.fuse"`,
+		} {
+			if !strings.Contains(out, ln) {
+				t.Errorf("output missing directive %q\n---\n%s", ln, out)
+			}
+		}
+	})
+
+	t.Run("debug-off-emits-no-directives", func(t *testing.T) {
+		out, err := EmitC11(mkModule())
+		if err != nil {
+			t.Fatalf("EmitC11: %v", err)
+		}
+		if strings.Contains(out, "#line") {
+			t.Errorf("debug-off output contains #line directive; output:\n%s", out)
+		}
+	})
+
+	t.Run("deterministic-across-runs", func(t *testing.T) {
+		first, err := EmitC11WithOptions(mkModule(), EmitOptions{
+			Debug: true, SourceFile: "proof.fuse",
+		})
+		if err != nil {
+			t.Fatalf("EmitC11WithOptions: %v", err)
+		}
+		for i := 0; i < 3; i++ {
+			got, err := EmitC11WithOptions(mkModule(), EmitOptions{
+				Debug: true, SourceFile: "proof.fuse",
+			})
+			if err != nil {
+				t.Fatalf("EmitC11WithOptions run %d: %v", i+1, err)
+			}
+			if got != first {
+				t.Fatalf("debug-mode output differs on run %d (Rule 7.1)", i+1)
+			}
+		}
+	})
+}
+
 // buildMain is a small helper that constructs a `main` function with
 // the given body.
 func buildMain(build func(b *mir.Builder)) *mir.Module {

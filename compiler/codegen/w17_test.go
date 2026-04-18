@@ -204,6 +204,12 @@ func TestCompilerIntrinsicDispatch(t *testing.T) {
 			wantSub:  "((uint64_t)16)",
 			dontWant: "__fuse_intrinsic_size_of",
 		},
+		{
+			name:     "align_of with byte-count payload (W24)",
+			callName: "__fuse_intrinsic_align_of__8",
+			wantSub:  "((uint64_t)8)",
+			dontWant: "__fuse_intrinsic_align_of",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -337,11 +343,29 @@ func TestSizeOfValEmission(t *testing.T) {
 
 func TestOverflowDebugPanic(t *testing.T) {
 	got := EmitOverflowAdd(3, 1, 2, OverflowDebugPanic)
-	if !strings.Contains(got, "__builtin_add_overflow") {
-		t.Errorf("debug panic must use __builtin_add_overflow: %q", got)
+	// W24: debug-panic must route through the runtime helper so
+	// MSVC hosts (which lack __builtin_*_overflow) link cleanly.
+	// The runtime side picks the right implementation per host.
+	if !strings.Contains(got, "fuse_rt_add_overflow_i64") {
+		t.Errorf("debug panic must dispatch to fuse_rt_add_overflow_i64 (cross-compiler): %q", got)
+	}
+	if strings.Contains(got, "__builtin_add_overflow") {
+		t.Errorf("debug panic must NOT inline __builtin_add_overflow (MSVC lacks it): %q", got)
 	}
 	if !strings.Contains(got, "fuse_rt_panic") {
 		t.Errorf("debug panic must call fuse_rt_panic on overflow: %q", got)
+	}
+	// Same contract for sub / mul.
+	for _, pair := range []struct {
+		got  string
+		call string
+	}{
+		{EmitOverflowSub(3, 1, 2, OverflowDebugPanic), "fuse_rt_sub_overflow_i64"},
+		{EmitOverflowMul(3, 1, 2, OverflowDebugPanic), "fuse_rt_mul_overflow_i64"},
+	} {
+		if !strings.Contains(pair.got, pair.call) {
+			t.Errorf("debug panic missing %s: %q", pair.call, pair.got)
+		}
 	}
 }
 

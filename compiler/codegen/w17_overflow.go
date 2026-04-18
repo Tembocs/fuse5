@@ -28,16 +28,19 @@ func (p OverflowPolicy) String() string {
 // EmitOverflowAdd returns the C statement for a plain `+` on two
 // int64 registers under the given policy.
 //
-//   - debug_panic: checks via __builtin_add_overflow and calls
-//     fuse_rt_panic on overflow before assigning; no observable
-//     wrap.
+//   - debug_panic: dispatches to fuse_rt_add_overflow_i64 and calls
+//     fuse_rt_panic on overflow before observing the result. The
+//     runtime routes to __builtin_add_overflow on GCC / Clang and
+//     to a portable pure-C fallback on MSVC (W24 retires the MSVC
+//     overflow-fallback STUBS row).
 //   - release_wrap: wraps via uint64 cast, matching reference
-//     §33.1's deterministic release default.
+//     §33.1's deterministic release default. Wrap arithmetic does
+//     not depend on any builtin.
 func EmitOverflowAdd(dst, lhs, rhs int, policy OverflowPolicy) string {
 	switch policy {
 	case OverflowDebugPanic:
 		return fmt.Sprintf(
-			"    if (__builtin_add_overflow(r%d, r%d, &r%d)) fuse_rt_panic(\"arithmetic overflow\");\n",
+			"    if (fuse_rt_add_overflow_i64(r%d, r%d, &r%d)) fuse_rt_panic(\"arithmetic overflow\");\n",
 			lhs, rhs, dst)
 	case OverflowReleaseWrap:
 		return fmt.Sprintf(
@@ -49,12 +52,14 @@ func EmitOverflowAdd(dst, lhs, rhs int, policy OverflowPolicy) string {
 
 // EmitOverflowSub / EmitOverflowMul mirror EmitOverflowAdd for the
 // other two arithmetic ops. The policy choice at W17 applies
-// uniformly to +, -, * per §33.1.
+// uniformly to +, -, * per §33.1. Like EmitOverflowAdd, the debug-
+// panic path routes through runtime helpers so MSVC hosts link
+// cleanly.
 func EmitOverflowSub(dst, lhs, rhs int, policy OverflowPolicy) string {
 	switch policy {
 	case OverflowDebugPanic:
 		return fmt.Sprintf(
-			"    if (__builtin_sub_overflow(r%d, r%d, &r%d)) fuse_rt_panic(\"arithmetic overflow\");\n",
+			"    if (fuse_rt_sub_overflow_i64(r%d, r%d, &r%d)) fuse_rt_panic(\"arithmetic overflow\");\n",
 			lhs, rhs, dst)
 	case OverflowReleaseWrap:
 		return fmt.Sprintf(
@@ -68,7 +73,7 @@ func EmitOverflowMul(dst, lhs, rhs int, policy OverflowPolicy) string {
 	switch policy {
 	case OverflowDebugPanic:
 		return fmt.Sprintf(
-			"    if (__builtin_mul_overflow(r%d, r%d, &r%d)) fuse_rt_panic(\"arithmetic overflow\");\n",
+			"    if (fuse_rt_mul_overflow_i64(r%d, r%d, &r%d)) fuse_rt_panic(\"arithmetic overflow\");\n",
 			lhs, rhs, dst)
 	case OverflowReleaseWrap:
 		return fmt.Sprintf(

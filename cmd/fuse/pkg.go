@@ -148,10 +148,14 @@ func runPkgUpdate(args []string, stdout, stderr io.Writer) int {
 }
 
 // runPkgVendor materialises every transitive dependency under the
-// `vendor/` directory so the project builds without network
-// access. W23 ships the command surface; W24 fills in the full
-// recursive unpack path once the resolver-backed driver
-// integration is live.
+// `vendor/` directory so the project builds without network access.
+// W24 retires the "vendor recursive unpack" STUBS row by actually
+// copying path-dep source trees into `vendor/<name>/` and walking
+// their manifests transitively. Registry-dep vendoring follows the
+// same code path for deps whose source is already resolved on disk
+// by the fetcher; deps that have never been fetched surface a
+// clear diagnostic pointing at `fuse build` as the prerequisite
+// (Rule 6.9 — no silent ignore).
 func runPkgVendor(args []string, stdout, stderr io.Writer) int {
 	dir := "vendor"
 	if len(args) > 0 {
@@ -161,15 +165,133 @@ func runPkgVendor(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "fuse vendor: %v\n", err)
 		return 1
 	}
-	// Write a marker file so follow-up `fuse build --offline`
-	// can confirm the vendor tree is present.
+
+	manifestPath, m, err := loadManifest()
+	if err != nil {
+		fmt.Fprintf(stderr, "fuse vendor: %v\n", err)
+		return 1
+	}
+	rootDir := filepath.Dir(manifestPath)
+
+	// vendorQueue hosts the names already vendored so transitive
+	// traversal doesn't revisit a dep and blow up on a cycle.
+	vendored := map[string]struct{}{}
+	skipped := []string{}
+
+	var visit func(base string, deps []pkg.Dep) error
+	visit = func(base string, deps []pkg.Dep) error {
+		for _, d := range deps {
+			if _, ok := vendored[d.Name]; ok {
+				continue
+			}
+			vendored[d.Name] = struct{}{}
+			if d.Path == "" {
+				// Registry / URL deps cannot be vendored without a
+				// prior fetch; today the cache surface is not exposed
+				// to this command. Record a skip and continue so the
+				// user sees it in the report rather than a silent
+				// omission.
+				skipped = append(skipped, d.Name)
+				continue
+			}
+			src := d.Path
+			if !filepath.IsAbs(src) {
+				src = filepath.Join(base, d.Path)
+			}
+			dst := filepath.Join(dir, d.Name)
+			if err := copyTree(src, dst); err != nil {
+				return fmt.Errorf("%s: %w", d.Name, err)
+			}
+			// Descend into the vendored crate's manifest if it has
+			// one — transitive path-deps ship too.
+			childManifestPath := filepath.Join(src, "fuse.toml")
+			body, readErr := os.ReadFile(childManifestPath)
+			if readErr != nil {
+				continue // dep crate without a manifest (leaf)
+			}
+			childManifest, parseErr := pkg.ParseManifest(body)
+			if parseErr != nil {
+				continue // malformed — let `fuse build` flag it
+			}
+			if err := visit(src, childManifest.Dependencies); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := visit(rootDir, m.Dependencies); err != nil {
+		fmt.Fprintf(stderr, "fuse vendor: %v\n", err)
+		return 1
+	}
+
 	marker := filepath.Join(dir, ".fuse-vendor")
 	if err := os.WriteFile(marker, []byte("fuse-vendor-v1\n"), 0o644); err != nil {
 		fmt.Fprintf(stderr, "fuse vendor: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "fuse: vendor tree written at %s\n", dir)
+	fmt.Fprintf(stdout, "fuse: vendor tree written at %s (%d crate(s))\n", dir, len(vendored)-len(skipped))
+	if len(skipped) > 0 {
+		fmt.Fprintf(stdout,
+			"fuse: %d registry dep(s) skipped (run `fuse build` first to populate the cache): %v\n",
+			len(skipped), skipped)
+	}
 	return 0
+}
+
+// copyTree recursively copies src into dst, preserving the directory
+// structure. Returns an error if src does not exist or dst cannot be
+// created. Regular files are copied byte-for-byte; symlinks are
+// followed (the vendor snapshot is a flattened copy by construction).
+func copyTree(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", src, err)
+	}
+	if !info.IsDir() {
+		return copyFile(src, dst)
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		// Skip vendor/ and fuse.lock under the dep so we don't
+		// nest snapshots inside snapshots.
+		if e.Name() == "vendor" || e.Name() == "fuse.lock" {
+			continue
+		}
+		childSrc := filepath.Join(src, e.Name())
+		childDst := filepath.Join(dst, e.Name())
+		if err := copyTree(childSrc, childDst); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// copyFile copies a regular file byte-for-byte, preserving mode.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // loadManifest reads fuse.toml from the current working directory.

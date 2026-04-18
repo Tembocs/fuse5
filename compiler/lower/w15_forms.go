@@ -254,31 +254,36 @@ func (l *lowerer) lowerCastTagged(modPath string, b *mir.Builder, x *hir.CastExp
 }
 
 // isPointerCast reports whether the (src, dst) pair names a
-// pointer-to-integer or integer-to-pointer shape. The STUBS.md
-// row "Pointer-cast classification" retires in W26 with a
-// concrete diagnostic; until then the lowerer emits the declared
-// text rather than the generic "not supported" fallback.
+// pointer-to-integer or integer-to-pointer shape. Retained as a
+// classifier-hint for diagnostic paths that want to distinguish
+// "pointer-cast attempted but rejected by the checker" from
+// genuinely non-classifiable forms.
 func (l *lowerer) isPointerCast(src, dst typetable.TypeId) bool {
 	sT := l.prog.Types.Get(src)
 	dT := l.prog.Types.Get(dst)
 	if sT == nil || dT == nil {
 		return false
 	}
-	isPtr := func(k typetable.Kind) bool {
-		return k == typetable.KindPtr || k == typetable.KindRef || k == typetable.KindMutref
-	}
-	sPtr := isPtr(sT.Kind)
-	dPtr := isPtr(dT.Kind)
+	sPtr := isPointerKind(sT.Kind)
+	dPtr := isPointerKind(dT.Kind)
 	sScalar := l.isScalarType(src)
 	dScalar := l.isScalarType(dst)
-	// Pointer↔integer in either direction.
-	return (sPtr && dScalar) || (sScalar && dPtr)
+	return (sPtr && dScalar) || (sScalar && dPtr) || (sPtr && dPtr)
 }
 
 // classifyCast walks the reference §28.1 classification ladder and
 // returns the most specific CastMode for a given (source, target)
 // TypeId pair. CastInvalid means the cast is not expressible as a
 // direct MIR op — codegen would need a constructor call instead.
+//
+// §28.1 contract:
+//   - pointer↔pointer → CastReinterpret
+//   - pointer → USize/ISize (or any integer width; codegen narrows
+//     via intptr_t) → CastPtrToInt
+//   - integer → pointer → CastIntToPtr (the checker enforces the
+//     reference's "permitted only in `unsafe` contexts" rule; the
+//     lowerer classifies unconditionally and trusts the checker
+//     gate upstream)
 func (l *lowerer) classifyCast(src, dst typetable.TypeId) mir.CastMode {
 	sT := l.prog.Types.Get(src)
 	dT := l.prog.Types.Get(dst)
@@ -310,10 +315,30 @@ func (l *lowerer) classifyCast(src, dst typetable.TypeId) mir.CastMode {
 			return mir.CastNarrow
 		}
 	}
-	// Pointer / integer cast forms are classified by kind, but the
-	// W15 scope limits pointer handling to reinterpret until W16
-	// brings the raw-pointer surface online.
+	sPtr := isPointerKind(sT.Kind)
+	dPtr := isPointerKind(dT.Kind)
+	switch {
+	case sPtr && dPtr:
+		// Pointer-to-pointer: bit-level reinterpret (§28.1 "do not
+		// participate in ownership analysis").
+		return mir.CastReinterpret
+	case sPtr && dScalar:
+		// Pointer-to-integer: USize / ISize representation (§28.1).
+		return mir.CastPtrToInt
+	case sScalar && dPtr:
+		// Integer-to-pointer: `unsafe`-only per §28.1. The checker
+		// enforces the unsafe gate; the lowerer classifies.
+		return mir.CastIntToPtr
+	}
 	return mir.CastInvalid
+}
+
+// isPointerKind reports whether k is one of the pointer-category
+// typetable kinds that participate in §28.1 classification. Kept
+// package-local so classifyCast and isPointerCast share one source
+// of truth.
+func isPointerKind(k typetable.Kind) bool {
+	return k == typetable.KindPtr || k == typetable.KindRef || k == typetable.KindMutref
 }
 
 // scalarBits returns the bit-width of a primitive numeric Kind.

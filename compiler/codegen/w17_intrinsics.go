@@ -64,6 +64,22 @@ func tryEmitCompilerIntrinsic(in mir.Inst) (string, bool) {
 			}
 		}
 		return EmitSizeOf(bytes), true
+	case "align_of":
+		bytes := uint64(0)
+		if hasPayload {
+			if n, err := strconv.ParseUint(payload, 10, 64); err == nil {
+				bytes = n
+			}
+		}
+		return EmitAlignOf(bytes), true
+	case "size_of_val":
+		// size_of_val takes the referenced value as its single arg.
+		// The emitter wraps it in sizeof-of-dereference so the C
+		// compiler computes the size at the real value's type.
+		if len(regExprs) == 1 {
+			return EmitSizeOfVal(regExprs[0]), true
+		}
+		return fmt.Sprintf("/* size_of_val: expected 1 arg, got %d */", len(regExprs)), true
 	}
 	return "", false
 }

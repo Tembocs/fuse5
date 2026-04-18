@@ -3,6 +3,8 @@ package lsp
 import (
 	"strings"
 	"sync"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // DocStore is the in-memory model of the workspace's open
@@ -115,30 +117,58 @@ func applyRangeEdit(text string, r Range, newText string) string {
 }
 
 // positionToByteOffset converts a 0-based (line, character)
-// position to a byte offset in text. Returns -1 for positions
-// past the end of the document. W19 treats character as byte
-// count — full UTF-16 code-unit mapping lands with W22.
+// LSP position to a byte offset in text. Returns -1 for positions
+// past the end of the document.
+//
+// LSP 3.17 §3.17/PositionEncodingKind defaults character to a
+// UTF-16 code-unit count. Fuse sources are stored as UTF-8; we
+// decode runes and advance Character by utf16.RuneLen(r) per
+// rune. ASCII text is observationally unchanged — one byte per
+// rune, one UTF-16 code unit per rune — so existing test
+// corpora remain valid.
 func positionToByteOffset(text string, p Position) int {
-	line, col := 0, 0
+	if p.Line < 0 || p.Character < 0 {
+		return -1
+	}
+	line := 0
+	lineStart := 0
+	// Walk to the target line.
 	for i := 0; i < len(text); i++ {
-		if line == p.Line && col == p.Character {
-			return i
+		if line == p.Line {
+			break
 		}
 		if text[i] == '\n' {
 			line++
-			col = 0
-		} else {
-			col++
+			lineStart = i + 1
 		}
 	}
-	if line == p.Line && col == p.Character {
-		return len(text)
+	if line != p.Line {
+		// p.Line past end of document.
+		if p.Line == line+1 && p.Character == 0 && len(text) > 0 && text[len(text)-1] == '\n' {
+			return len(text)
+		}
+		return -1
+	}
+	// Walk UTF-16 code units along the target line.
+	col := 0
+	off := lineStart
+	for off < len(text) && text[off] != '\n' {
+		if col == p.Character {
+			return off
+		}
+		r, size := utf8.DecodeRuneInString(text[off:])
+		col += utf16.RuneLen(r)
+		off += size
+	}
+	if col == p.Character {
+		return off
 	}
 	return -1
 }
 
 // byteOffsetToPosition is the inverse mapping used to convert
-// compiler spans back to LSP positions.
+// compiler spans back to LSP positions. Emits Character as a
+// UTF-16 code-unit count (LSP 3.17 §3.17/PositionEncodingKind).
 func byteOffsetToPosition(text string, offset int) Position {
 	if offset < 0 {
 		return Position{}
@@ -146,14 +176,19 @@ func byteOffsetToPosition(text string, offset int) Position {
 	if offset > len(text) {
 		offset = len(text)
 	}
-	line, col := 0, 0
+	line := 0
+	lineStart := 0
 	for i := 0; i < offset; i++ {
 		if text[i] == '\n' {
 			line++
-			col = 0
-		} else {
-			col++
+			lineStart = i + 1
 		}
+	}
+	col := 0
+	for i := lineStart; i < offset; {
+		r, size := utf8.DecodeRuneInString(text[i:])
+		col += utf16.RuneLen(r)
+		i += size
 	}
 	return Position{Line: line, Character: col}
 }

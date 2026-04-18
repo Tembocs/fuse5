@@ -8,14 +8,44 @@ import (
 	"github.com/Tembocs/fuse5/compiler/mir"
 )
 
-// EmitC11 returns a freestanding ISO C11 translation unit for the
-// given MIR Module. The output is deterministic — byte-identical
-// across runs and platforms for the same input (Rule 7.1).
-//
-// Errors indicate a MIR instruction outside the W05 subset; they are
-// compiler bugs, not user errors, because the lowerer should have
-// caught any user-reachable form before MIR reached the emitter.
+// EmitOptions tunes codegen emission. Zero value is "no debug info,
+// no source attribution" — the historical EmitC11 behavior. W24 added
+// per-statement `#line` directive support gated by Debug + SourceFile.
+type EmitOptions struct {
+	// Debug, when true, causes emitInst to emit a `#line N "source"`
+	// directive whenever the MIR instruction's Line field changes.
+	// This gives gdb / lldb per-statement mappings back to Fuse
+	// source, which is what the W24 stub "compiler-emitted debug-
+	// line directives per MIR statement" retires.
+	Debug bool
+	// SourceFile is the `.fuse` source filename placed in every
+	// `#line` directive. When empty, the emitter falls back to
+	// `<fuse>`. Path separators are normalised by EmitLineDirective
+	// so goldens stay stable across hosts.
+	SourceFile string
+}
+
+// EmitC11 is the historical signature retained for callers that do
+// not need debug-line directives. Delegates to EmitC11WithOptions
+// with a zero Options value (Debug=false, SourceFile=""), which
+// preserves the pre-W24 byte-stable output.
 func EmitC11(m *mir.Module) (string, error) {
+	return EmitC11WithOptions(m, EmitOptions{})
+}
+
+// EmitC11WithOptions is the W24+ entry point. Behavior is
+// identical to EmitC11 when opts.Debug is false; when Debug is
+// true, the emitter inserts `#line N "source"` directives ahead
+// of every MIR instruction whose Line differs from the preceding
+// one. The output is still deterministic (Rule 7.1) — line numbers
+// are pinned by the lowerer at lower time, so identical input
+// still produces identical output.
+//
+// Errors indicate a MIR instruction outside the supported subset;
+// they are compiler bugs, not user errors, because the lowerer
+// should have caught any user-reachable form before MIR reached
+// the emitter.
+func EmitC11WithOptions(m *mir.Module, opts EmitOptions) (string, error) {
 	// Emit functions in sorted name order for determinism.
 	names := m.SortedFunctionNames()
 	byName := map[string]*mir.Function{}
@@ -57,14 +87,14 @@ func EmitC11(m *mir.Module) (string, error) {
 		if name == "main" {
 			continue
 		}
-		if err := emitFunction(&sb, byName[name], false); err != nil {
+		if err := emitFunction(&sb, byName[name], false, opts); err != nil {
 			return "", err
 		}
 		sb.WriteByte('\n')
 	}
 
 	if hasMain {
-		if err := emitFunction(&sb, mainFn, true); err != nil {
+		if err := emitFunction(&sb, mainFn, true, opts); err != nil {
 			return "", err
 		}
 	}
@@ -92,8 +122,9 @@ func emitFunctionProto(sb *strings.Builder, f *mir.Function) error {
 
 // emitFunction writes one MIR Function. When asMain is true the
 // function is emitted as `int main(void)` and the return register is
-// narrowed to `int` with an explicit cast.
-func emitFunction(sb *strings.Builder, f *mir.Function, asMain bool) error {
+// narrowed to `int` with an explicit cast. opts.Debug toggles the
+// emission of per-statement `#line` directives.
+func emitFunction(sb *strings.Builder, f *mir.Function, asMain bool, opts EmitOptions) error {
 	if asMain {
 		if f.NumParams != 0 {
 			return fmt.Errorf("fn main must be zero-arg at this wave, got %d params", f.NumParams)
@@ -143,11 +174,22 @@ func emitFunction(sb *strings.Builder, f *mir.Function, asMain bool) error {
 	// branches (TermJump / TermIfEq) can target them. The label
 	// scheme is `L<blockID>:` — simple, deterministic, C-safe.
 	needLabels := len(f.Blocks) > 1
+	// lastLine tracks the most recent source line a `#line` directive
+	// pointed at. Emitted directives are stateful at the C
+	// preprocessor level — once `#line N` fires, every subsequent C
+	// line is understood to be that Fuse line until another directive
+	// changes it. The comparison skips zero-line insts (synthetic
+	// ops the lowerer produced without a source position).
+	lastLine := 0
 	for _, blk := range f.Blocks {
 		if needLabels {
 			fmt.Fprintf(sb, "L%d:\n", blk.ID)
 		}
 		for _, in := range blk.Insts {
+			if opts.Debug && in.Line > 0 && in.Line != lastLine {
+				fmt.Fprintf(sb, "%s\n", EmitLineDirective(in.Line, opts.SourceFile))
+				lastLine = in.Line
+			}
 			if err := emitInst(sb, in); err != nil {
 				return fmt.Errorf("fn %s block %d: %w", f.Name, blk.ID, err)
 			}

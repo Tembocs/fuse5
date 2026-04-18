@@ -20,7 +20,7 @@ func (b *Builder) Spawn(entryName string, arg Reg) Reg {
 	if arg != NoReg {
 		args = append(args, arg)
 	}
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpSpawn, Dst: dst, CallName: entryName, CallArgs: args,
 	})
 	return dst
@@ -30,7 +30,7 @@ func (b *Builder) Spawn(entryName string, arg Reg) Reg {
 // Returns the register that receives the thread's int64_t return.
 func (b *Builder) ThreadJoin(handleReg Reg) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpThreadJoin, Dst: dst, Lhs: handleReg,
 	})
 	return dst
@@ -41,7 +41,7 @@ func (b *Builder) ThreadJoin(handleReg Reg) Reg {
 // channel pointer.
 func (b *Builder) ChanNew(capacityReg, elemBytesReg Reg) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpChanNew, Dst: dst, Lhs: capacityReg, Rhs: elemBytesReg,
 	})
 	return dst
@@ -51,7 +51,7 @@ func (b *Builder) ChanNew(capacityReg, elemBytesReg Reg) Reg {
 // value pointer in valuePtrReg. Returns the status-code register.
 func (b *Builder) ChanSend(chanReg, valuePtrReg Reg) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpChanSend, Dst: dst, Lhs: chanReg, Rhs: valuePtrReg,
 	})
 	return dst
@@ -61,7 +61,7 @@ func (b *Builder) ChanSend(chanReg, valuePtrReg Reg) Reg {
 // writes to outPtrReg. Returns the status-code register.
 func (b *Builder) ChanRecv(chanReg, outPtrReg Reg) Reg {
 	dst := b.NewReg()
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpChanRecv, Dst: dst, Lhs: chanReg, Rhs: outPtrReg,
 	})
 	return dst
@@ -69,7 +69,7 @@ func (b *Builder) ChanRecv(chanReg, outPtrReg Reg) Reg {
 
 // ChanClose emits an OpChanClose on the channel in chanReg. No Dst.
 func (b *Builder) ChanClose(chanReg Reg) {
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpChanClose, Lhs: chanReg,
 	})
 }
@@ -78,7 +78,7 @@ func (b *Builder) ChanClose(chanReg Reg) {
 // (panic never returns to the caller; the block should terminate
 // with Unreachable immediately after).
 func (b *Builder) Panic(message string) {
-	b.current.Insts = append(b.current.Insts, Inst{
+	b.appendInst(Inst{
 		Op: OpPanic, CallName: message,
 	})
 }

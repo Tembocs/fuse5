@@ -139,6 +139,15 @@ func (l *lowerer) lowerBlockToReturn(modPath string, b *mir.Builder, blk *hir.Bl
 // invocation with integer args). Forms outside the spine still
 // produce diagnostics rather than silent approximations.
 func (l *lowerer) lowerExpr(modPath string, b *mir.Builder, e hir.Expr, params map[string]mir.Reg) (mir.Reg, bool) {
+	// Propagate the expression's source line onto every MIR op the
+	// body of this function emits. W24 per-statement #line directives
+	// rely on Inst.Line being stamped at lower time; keeping this one
+	// call at the entry of lowerExpr means every register-producing
+	// instruction the lowerer emits carries its originating source
+	// line without each Builder primitive having to plumb it.
+	if sp := e.NodeSpan(); sp.Start.Line > 0 {
+		b.SetLine(sp.Start.Line)
+	}
 	switch x := e.(type) {
 	case *hir.LiteralExpr:
 		switch x.Kind {

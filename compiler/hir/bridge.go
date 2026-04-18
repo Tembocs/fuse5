@@ -294,6 +294,7 @@ func (b *Bridge) lowerModules() {
 // when the item is stored purely via type registration, like a plain
 // type alias with no body).
 func (b *Bridge) lowerItem(modPath string, it ast.Item) Item {
+	b.rejectStrayGlobalAllocator(it)
 	switch x := it.(type) {
 	case *ast.FnDecl:
 		return b.lowerFn(modPath, x)
@@ -319,6 +320,40 @@ func (b *Bridge) lowerItem(modPath string, it ast.Item) Item {
 		}
 	}
 	return nil
+}
+
+// rejectStrayGlobalAllocator emits a diagnostic when `@global_allocator`
+// is attached to anything but a `static` declaration. Reference §46.3
+// limits the attribute to the global-allocator static selector; putting
+// it on a fn / struct / trait / impl / enum is a user error, not a
+// silent ignore. (Rule 6.9 — every stub-ish path must emit a
+// diagnostic.) The check is intentionally done in the bridge so it fires
+// once per item regardless of whether downstream lowering succeeds.
+func (b *Bridge) rejectStrayGlobalAllocator(it ast.Item) {
+	var decs []*ast.Decorator
+	switch x := it.(type) {
+	case *ast.FnDecl:
+		decs = x.Decorators
+	case *ast.StructDecl:
+		decs = x.Decorators
+	case *ast.EnumDecl:
+		decs = x.Decorators
+	case *ast.ConstDecl:
+		decs = x.Decorators
+	case *ast.UnionDecl:
+		decs = x.Decorators
+	default:
+		return
+	}
+	for _, d := range decs {
+		if d != nil && d.Name.Name == "global_allocator" {
+			b.Diags = append(b.Diags, lex.Diagnostic{
+				Span:    d.NodeSpan(),
+				Message: "`@global_allocator` only applies to `static` items",
+				Hint:    "move the attribute to a `static` declaration whose value resolves to an Allocator",
+			})
+		}
+	}
 }
 
 func (b *Bridge) lowerFn(modPath string, x *ast.FnDecl) *FnDecl {
@@ -481,13 +516,29 @@ func (b *Bridge) lowerStatic(modPath string, x *ast.StaticDecl) *StaticDecl {
 		value = b.lowerExpr(modPath, idb, x.Value, declType)
 		idb.Pop()
 	}
+	globalAlloc := false
+	for _, d := range x.Decorators {
+		if d == nil || d.Name.Name != "global_allocator" {
+			continue
+		}
+		if len(d.Args) > 0 {
+			b.Diags = append(b.Diags, lex.Diagnostic{
+				Span:    d.NodeSpan(),
+				Message: "`@global_allocator` takes no arguments",
+				Hint:    "remove the argument list; the attribute is a bare flag",
+			})
+			continue
+		}
+		globalAlloc = true
+	}
 	return &StaticDecl{
-		Base:     Base{ID: ItemID(modPath, x.Name.Name), Span: x.NodeSpan()},
-		Name:     x.Name.Name,
-		Type:     declType,
-		Value:    value,
-		IsExtern: x.IsExtern,
-		SymID:    symID,
+		Base:            Base{ID: ItemID(modPath, x.Name.Name), Span: x.NodeSpan()},
+		Name:            x.Name.Name,
+		Type:            declType,
+		Value:           value,
+		IsExtern:        x.IsExtern,
+		SymID:           symID,
+		GlobalAllocator: globalAlloc,
 	}
 }
 

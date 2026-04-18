@@ -3,7 +3,10 @@
 // them in standard tooling; TestPerfBaseline asserts the corpus
 // is complete and the thresholds file is well-formed.
 //
-// W17 establishes the baseline; W27 becomes the full gate.
+// W17 established the baseline; W24 wired the lex + parse + check
+// + monomorph benchmarks to actually exercise the compiler (the
+// original stand-ins mis-measured unrelated workloads); W27
+// becomes the full gate.
 package perf_test
 
 import (
@@ -12,6 +15,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Tembocs/fuse5/compiler/check"
+	"github.com/Tembocs/fuse5/compiler/hir"
+	"github.com/Tembocs/fuse5/compiler/lex"
+	"github.com/Tembocs/fuse5/compiler/monomorph"
+	"github.com/Tembocs/fuse5/compiler/parse"
+	"github.com/Tembocs/fuse5/compiler/resolve"
+	"github.com/Tembocs/fuse5/compiler/typetable"
 )
 
 // TestPerfCorpusPresent asserts that every benchmark named in
@@ -108,32 +119,68 @@ func TestPerfBaseline(t *testing.T) {
 	}
 }
 
-// BenchmarkLexParseCorpus runs a lexer + parser pass over a
-// corpus roughly the size of the self-host compiler. The body is
-// deliberately minimal at W17 — we seed the corpus with a single
-// large synthetic source so the benchmark's runtime is reproducible
-// on every host. W25 (self-hosting) replaces the synthetic source
-// with the real stage2 compiler.
+// BenchmarkLexParseCorpus runs the real Stage 1 lexer + parser over
+// a synthetic Fuse corpus. W24 rewired this from the W17-era
+// "count words in a byte buffer" stand-in (which the 2026-04-18
+// audit flagged as L013-shaped) to an actual compiler hot-path
+// workload: every iteration instantiates a lex.Scanner, drains it,
+// and feeds the tokens into parse.ParseTokens. The corpus is
+// deterministic so cross-host timing comparisons remain meaningful.
 func BenchmarkLexParseCorpus(b *testing.B) {
-	corpus := buildSyntheticCorpus(50000)
+	corpus := buildSyntheticCorpus(500)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		countWordsInBytes(corpus)
+		sc := lex.NewScanner("corpus.fuse", corpus)
+		sc.Run()
+		file, _ := parse.ParseTokens("corpus.fuse", sc.Tokens(), sc.Errors())
+		if file == nil {
+			b.Fatal("parser returned nil file on the corpus")
+		}
 	}
 }
 
 // BenchmarkMonomorphHeavy exercises the generic-specialisation
-// hot path. W17 seeds a stand-in workload (a small Go loop that
-// mimics per-specialisation work) so the benchmark is
-// architecture-agnostic; W25 replaces this with a genuine
-// monomorph.Specialize call on a generic-heavy Fuse program.
+// hot path by building a real hir.Program with a generic function
+// and invoking monomorph.Collect + Specialize each iteration.
+// W17 shipped a Go-side arithmetic stand-in; W24 (this file) wires
+// the real compiler pipeline so the benchmark actually measures
+// monomorphisation cost, not `j*(j+1)`.
 func BenchmarkMonomorphHeavy(b *testing.B) {
+	// Build a small program once so the benchmark body times the
+	// repeated Collect+Specialize, not the one-time AST/HIR setup.
+	const src = `
+fn identity[T](x: T) -> T { return x; }
+fn main() -> I32 {
+    let a: I32 = identity[I32](1);
+    let b: I64 = identity[I64](2);
+    let c: U32 = identity[U32](3);
+    let d: U64 = identity[U64](4);
+    return a;
+}
+`
+	f, diags := parse.Parse("mono.fuse", []byte(src))
+	if len(diags) != 0 {
+		b.Fatalf("parse: %v", diags)
+	}
+	srcs := []*resolve.SourceFile{{ModulePath: "m", File: f}}
+	resolved, rd := resolve.Resolve(srcs, resolve.BuildConfig{})
+	if len(rd) != 0 {
+		b.Fatalf("resolve: %v", rd)
+	}
+	tab := typetable.New()
+	prog, bd := hir.NewBridge(tab, resolved, srcs).Run()
+	if len(bd) != 0 {
+		b.Fatalf("bridge: %v", bd)
+	}
+	if cd := check.Check(prog); len(cd) != 0 {
+		b.Fatalf("check: %v", cd)
+	}
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		sum := 0
-		for j := 0; j < 1000; j++ {
-			sum += j * (j + 1)
-		}
-		_ = sum
+		// Specialize is the monomorph pass entry point. Each
+		// iteration sees the same input; tight-loop timing measures
+		// steady-state specialisation cost.
+		_, _ = monomorph.Specialize(prog)
 	}
 }
 
@@ -187,21 +234,3 @@ func buildSyntheticCorpus(approxLines int) []byte {
 	return []byte(sb.String())
 }
 
-// countWordsInBytes is a trivial lexer-like routine: it walks the
-// buffer and counts whitespace-separated tokens. Mimics the
-// inner-loop shape of a real lexer without depending on the full
-// compiler; W25 replaces it with lex.Scan.
-func countWordsInBytes(buf []byte) int {
-	n := 0
-	inWord := false
-	for _, c := range buf {
-		ws := c == ' ' || c == '\t' || c == '\n' || c == '\r'
-		if !ws && !inWord {
-			n++
-			inWord = true
-		} else if ws {
-			inWord = false
-		}
-	}
-	return n
-}

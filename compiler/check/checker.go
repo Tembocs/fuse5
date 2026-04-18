@@ -31,7 +31,44 @@ func Check(prog *hir.Program) []Diagnostic {
 	c.checkAssociatedTypesCoverage()
 	c.checkBodies()
 	c.checkConcurrency()
+	c.checkGlobalAllocatorUniqueness()
 	return c.diags
+}
+
+// checkGlobalAllocatorUniqueness enforces reference §46.3: a program
+// carries at most one static marked `@global_allocator`. The bridge
+// already validated placement (only on `static` items) and argument
+// shape (none). This pass runs after body checking so the diagnostic
+// appears alongside the rest of the check output rather than in an
+// earlier stream; it walks every module's items and, on finding a
+// second selector, emits a diagnostic whose span points at the
+// duplicate — the first selector is naming the incumbent.
+func (c *checker) checkGlobalAllocatorUniqueness() {
+	var first *hir.StaticDecl
+	for _, modPath := range c.prog.Order {
+		m := c.prog.Modules[modPath]
+		if m == nil {
+			continue
+		}
+		for _, it := range m.Items {
+			st, ok := it.(*hir.StaticDecl)
+			if !ok || !st.GlobalAllocator {
+				continue
+			}
+			if first == nil {
+				first = st
+				continue
+			}
+			c.diags = append(c.diags, Diagnostic{
+				Span: st.NodeSpan(),
+				Message: fmt.Sprintf(
+					"more than one `@global_allocator` static in this program; the first was %q",
+					first.Name,
+				),
+				Hint: "exactly one static per crate graph may own the global allocator",
+			})
+		}
+	}
 }
 
 // Stats reports high-level counters from a check run. Used by tests

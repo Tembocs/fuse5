@@ -66,6 +66,10 @@ func TestStubRuntime(t *testing.T) {
 		"fuse_rt_chan_try_recv",
 		"fuse_rt_chan_close",
 		"fuse_rt_chan_free",
+		// Arithmetic overflow (W24 — cross-compiler).
+		"fuse_rt_add_overflow_i64",
+		"fuse_rt_sub_overflow_i64",
+		"fuse_rt_mul_overflow_i64",
 	}
 	for _, fn := range required {
 		if !strings.Contains(header, fn) {

@@ -139,6 +139,90 @@ alpha = "^1.0.0"
 		})
 	})
 
+	// TestVendorRecursiveUnpack pins the W24 "fuse vendor recursive
+	// unpack" stub retirement. A two-crate project with a path
+	// dependency must, after `fuse vendor`, contain the dep's
+	// source tree under `vendor/<name>/` — not just the marker file
+	// the W23-era implementation wrote.
+	t.Run("vendor-unpacks-path-deps", func(t *testing.T) {
+		// Build a temp layout:
+		//   root/
+		//     fuse.toml      (declares mathlib as a path dep)
+		//     src/main.fuse
+		//   mathlib/
+		//     fuse.toml
+		//     src/lib.fuse
+		outer := t.TempDir()
+		rootDir := filepath.Join(outer, "root")
+		mathDir := filepath.Join(outer, "mathlib")
+		for _, d := range []string{
+			filepath.Join(rootDir, "src"),
+			filepath.Join(mathDir, "src"),
+		} {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				t.Fatalf("mkdir %s: %v", d, err)
+			}
+		}
+		rootManifest := `
+[package]
+name = "root"
+version = "0.1.0"
+
+[dependencies]
+mathlib = { path = "../mathlib" }
+`
+		mathManifest := `
+[package]
+name = "mathlib"
+version = "0.1.0"
+`
+		writes := map[string]string{
+			filepath.Join(rootDir, "fuse.toml"):     rootManifest,
+			filepath.Join(rootDir, "src", "main.fuse"): `fn main() -> I32 { return 42; }`,
+			filepath.Join(mathDir, "fuse.toml"):     mathManifest,
+			filepath.Join(mathDir, "src", "lib.fuse"): `pub fn answer() -> I32 { return 42; }`,
+		}
+		for path, body := range writes {
+			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+				t.Fatalf("write %s: %v", path, err)
+			}
+		}
+
+		orig, _ := os.Getwd()
+		defer os.Chdir(orig)
+		if err := os.Chdir(rootDir); err != nil {
+			t.Fatalf("chdir root: %v", err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"vendor"}, &stdout, &stderr); code != 0 {
+			t.Fatalf("vendor exit = %d; stderr=%q", code, stderr.String())
+		}
+
+		// Marker file exists.
+		if _, err := os.Stat(filepath.Join(rootDir, "vendor", ".fuse-vendor")); err != nil {
+			t.Errorf("marker missing: %v", err)
+		}
+		// Dep's lib.fuse is unpacked.
+		unpackedLib := filepath.Join(rootDir, "vendor", "mathlib", "src", "lib.fuse")
+		contents, err := os.ReadFile(unpackedLib)
+		if err != nil {
+			t.Fatalf("expected vendored lib source at %s: %v", unpackedLib, err)
+		}
+		if !strings.Contains(string(contents), "pub fn answer()") {
+			t.Errorf("vendored lib.fuse missing expected content; got:\n%s", contents)
+		}
+		// Dep's manifest is unpacked (confirms the recursive
+		// descent found it for transitive traversal).
+		if _, err := os.Stat(filepath.Join(rootDir, "vendor", "mathlib", "fuse.toml")); err != nil {
+			t.Errorf("dep manifest not vendored: %v", err)
+		}
+		// stdout reports the crate count.
+		if !strings.Contains(stdout.String(), "1 crate(s)") {
+			t.Errorf("stdout should mention crate count; got %q", stdout.String())
+		}
+	})
+
 	t.Run("missing-manifest-is-error", func(t *testing.T) {
 		// In a directory with no fuse.toml, subcommands fail.
 		orig, _ := os.Getwd()

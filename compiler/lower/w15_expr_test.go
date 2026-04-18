@@ -9,34 +9,84 @@ import (
 	"github.com/Tembocs/fuse5/compiler/typetable"
 )
 
-// TestPointerCastDiagnostic pins the W15 pointer-cast diagnostic
-// established by the 2026-04-18 audit fix. A `ptr as int` shape
-// (or the reverse) must emit the STUBS.md-declared text rather
-// than fall through to the generic "not supported" message.
-// Rule 6.9 — no silent stubs.
-func TestPointerCastDiagnostic(t *testing.T) {
-	l, _, b, tab := w15TestLowerer(t)
-	// Build a cast from Ptr[I32] to I64 (a pointer-to-integer
-	// cast the W15 classifier rejects).
-	ptrType := tab.Ptr(tab.I32())
-	innerReg := b.ConstInt(0)
-	_ = innerReg
-	// Hand-build a CastExpr whose inner already has a Ptr type.
-	cast := &hir.CastExpr{
-		TypedBase: hir.TypedBase{Type: tab.I64()},
-		Expr:      mkLitInt(tab, "0", ptrType),
-	}
-	_, ok := l.lowerCastTagged("", b, cast, nil)
-	if ok {
-		t.Fatalf("pointer-to-integer cast should be rejected")
-	}
-	if len(l.diags) == 0 {
-		t.Fatalf("no diagnostic for pointer cast")
-	}
-	msg := l.diags[len(l.diags)-1].Message
-	if !contains(msg, "pointer-to-integer and integer-to-pointer casts not yet classified") {
-		t.Errorf("diagnostic does not match STUBS.md declared text: %q", msg)
-	}
+// TestPointerCastClassification pins the reference §28.1 contract:
+// the W15 classifier returns CastPtrToInt, CastIntToPtr, and
+// CastReinterpret for the three pointer-involving cast shapes.
+//
+// History: the 2026-04-18 audit added a stub diagnostic here; W24
+// retires the stub by landing the real classifier. If the three
+// modes ever regress to CastInvalid again, this test fails loudly.
+func TestPointerCastClassification(t *testing.T) {
+	t.Run("ptr-to-integer-maps-to-CastPtrToInt", func(t *testing.T) {
+		l, fn, b, tab := w15TestLowerer(t)
+		ptrType := tab.Ptr(tab.I32())
+		cast := &hir.CastExpr{
+			TypedBase: hir.TypedBase{Type: tab.I64()},
+			Expr:      mkLitInt(tab, "0", ptrType),
+		}
+		reg, ok := l.lowerCastTagged("", b, cast, nil)
+		if !ok {
+			t.Fatalf("pointer-to-integer cast rejected; diags=%v", l.diags)
+		}
+		b.Return(reg)
+		if err := fn.Validate(); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+		c := findInst(fn, mir.OpCast)
+		if c == nil {
+			t.Fatalf("no OpCast emitted")
+		}
+		if mir.CastMode(c.Mode) != mir.CastPtrToInt {
+			t.Fatalf("CastMode = %s, want CastPtrToInt", mir.CastMode(c.Mode))
+		}
+	})
+	t.Run("integer-to-ptr-maps-to-CastIntToPtr", func(t *testing.T) {
+		l, fn, b, tab := w15TestLowerer(t)
+		ptrType := tab.Ptr(tab.U8())
+		cast := &hir.CastExpr{
+			TypedBase: hir.TypedBase{Type: ptrType},
+			Expr:      mkLitInt(tab, "0", tab.USize()),
+		}
+		reg, ok := l.lowerCastTagged("", b, cast, nil)
+		if !ok {
+			t.Fatalf("integer-to-pointer cast rejected; diags=%v", l.diags)
+		}
+		b.Return(reg)
+		if err := fn.Validate(); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+		c := findInst(fn, mir.OpCast)
+		if c == nil {
+			t.Fatalf("no OpCast emitted")
+		}
+		if mir.CastMode(c.Mode) != mir.CastIntToPtr {
+			t.Fatalf("CastMode = %s, want CastIntToPtr", mir.CastMode(c.Mode))
+		}
+	})
+	t.Run("ptr-to-ptr-maps-to-CastReinterpret", func(t *testing.T) {
+		l, fn, b, tab := w15TestLowerer(t)
+		srcType := tab.Ptr(tab.I32())
+		dstType := tab.Ptr(tab.U8())
+		cast := &hir.CastExpr{
+			TypedBase: hir.TypedBase{Type: dstType},
+			Expr:      mkLitInt(tab, "0", srcType),
+		}
+		reg, ok := l.lowerCastTagged("", b, cast, nil)
+		if !ok {
+			t.Fatalf("pointer-to-pointer cast rejected; diags=%v", l.diags)
+		}
+		b.Return(reg)
+		if err := fn.Validate(); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+		c := findInst(fn, mir.OpCast)
+		if c == nil {
+			t.Fatalf("no OpCast emitted")
+		}
+		if mir.CastMode(c.Mode) != mir.CastReinterpret {
+			t.Fatalf("CastMode = %s, want CastReinterpret", mir.CastMode(c.Mode))
+		}
+	})
 }
 
 // TestCastLowering verifies the W15 cast-classification ladder
