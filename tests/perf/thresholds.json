@@ -1,0 +1,19 @@
+{
+  "schema": "fuse-perf/v1",
+  "host_profile": "tier-1-ci",
+  "benchmarks": {
+    "BenchmarkLexParseCorpus": {
+      "wall_ms_max": 500,
+      "peak_rss_mb_max": 64
+    },
+    "BenchmarkMonomorphHeavy": {
+      "wall_ms_max": 100
+    },
+    "BenchmarkTightArith": {
+      "ns_per_op_max": 100
+    },
+    "BenchmarkChanSpawnRT": {
+      "wall_ms_per_1000_max": 50
+    }
+  }
+}

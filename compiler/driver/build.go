@@ -40,6 +40,12 @@ type BuildOptions struct {
 	// WorkDir overrides the temp directory used for the generated
 	// C source. When empty, os.MkdirTemp picks one.
 	WorkDir string
+
+	// Debug, when true, emits DWARF-style debug info through the
+	// host C compiler (-g / /Zi) and injects #line directives in
+	// the generated C so native debuggers see Fuse source lines.
+	// W17 P12 — bootstrap debug-info rides on the C backend.
+	Debug bool
 }
 
 // BuildResult reports the outcome of a successful build. BinaryPath
@@ -142,10 +148,15 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 			names)
 	}
 
-	// Codegen.
+	// Codegen. When Debug is set, the emitter prepends a #line
+	// directive pointing at the originating .fuse source so gdb
+	// / lldb can map native addresses back to Fuse lines.
 	cSource, err := codegen.EmitC11(mirMod)
 	if err != nil {
 		return nil, nil, fmt.Errorf("codegen: %w", err)
+	}
+	if opts.Debug {
+		cSource = codegen.EmitLineDirective(1, opts.Source) + "\n" + cSource
 	}
 
 	// Work directory.
@@ -186,7 +197,7 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 	// need fuse_rt.h visible and libfuse_rt.a linked. The driver
 	// locates the runtime next to the Fuse repo root and builds
 	// the archive on demand so e2e tests stay hermetic.
-	ccOpts := cc.Options{}
+	ccOpts := cc.Options{Debug: opts.Debug}
 	if codegen.UsesRuntimeABI(mirMod) {
 		rtIncludes, rtObjects, rtLibs, rtErr := locateRuntimeArtifacts()
 		if rtErr != nil {

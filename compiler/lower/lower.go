@@ -32,9 +32,10 @@ func Lower(prog *hir.Program) (*mir.Module, []Diagnostic) {
 }
 
 type lowerer struct {
-	prog   *hir.Program
-	module *mir.Module
-	diags  []Diagnostic
+	prog         *hir.Program
+	module       *mir.Module
+	diags        []Diagnostic
+	spawnCounter int // W17: deterministic counter for lifted spawn fns
 }
 
 func (l *lowerer) run() {
@@ -165,6 +166,12 @@ func (l *lowerer) lowerExpr(modPath string, b *mir.Builder, e hir.Expr, params m
 			return mir.NoReg, false
 		}
 	case *hir.BinaryExpr:
+		// W17 routes equality / inequality through the semantic-
+		// equality lowerer so scalar vs nominal dispatch is
+		// structurally visible in MIR (reference §5.8).
+		if x.Op == hir.BinEq || x.Op == hir.BinNe {
+			return l.lowerSemanticEquality(modPath, b, x, params)
+		}
 		op, ok := mapBinaryOp(x.Op)
 		if !ok {
 			l.diagnose(x.NodeSpan(),
@@ -237,6 +244,24 @@ func (l *lowerer) lowerExpr(modPath string, b *mir.Builder, e hir.Expr, params m
 			}
 			return l.lowerInlinedClosureBody(modPath, b, clos.Body, inlineParams)
 		}
+		// W17: method-call disambiguation. `obj.name(args)` lowers
+		// to one of four forms depending on the receiver's type:
+		//   - ThreadHandle[T].join() → OpThreadJoin
+		//   - Chan[T].send/recv/close → OpChan{Send,Recv,Close}
+		//   - wrapping_*/checked_*/saturating_* → OpOverflowArith
+		//   - any other method → OpMethodCall
+		if field, ok := x.Callee.(*hir.FieldExpr); ok {
+			if reg, okRuntime := l.lowerRuntimeMethodCall(modPath, b, x, field, params); okRuntime {
+				return reg, true
+			}
+			if reg, ok2, recognised := l.lowerOverflowMethod(modPath, b, x, field, params); recognised {
+				if !ok2 {
+					return mir.NoReg, false
+				}
+				return reg, true
+			}
+			return l.lowerMethodCall(modPath, b, x, field, params)
+		}
 		callee, ok := x.Callee.(*hir.PathExpr)
 		if !ok {
 			l.diagnose(x.NodeSpan(),
@@ -259,20 +284,36 @@ func (l *lowerer) lowerExpr(modPath string, b *mir.Builder, e hir.Expr, params m
 			argRegs = append(argRegs, r)
 		}
 		return b.Call(cName(modPath, callee.Segments[0]), argRegs), true
+	case *hir.SpawnExpr:
+		return l.lowerSpawn(modPath, b, x, params)
+	case *hir.ReferenceExpr:
+		return l.lowerReference(modPath, b, x, params)
+	case *hir.FieldExpr:
+		return l.lowerFieldAccess(modPath, b, x, params)
+	case *hir.OptFieldExpr:
+		return l.lowerOptChain(modPath, b, x, params)
+	case *hir.IndexRangeExpr:
+		return l.lowerIndexRange(modPath, b, x, params)
+	case *hir.StructLitExpr:
+		return l.lowerStructLit(modPath, b, x, params)
 	case *hir.MatchExpr:
 		return l.lowerMatch(modPath, b, x, params)
 	case *hir.TryExpr:
 		return l.lowerTry(modPath, b, x, params)
 	case *hir.CastExpr:
-		// W14 casts are passthroughs at MIR level: the MIR treats
-		// every integer register as int64, and the C11 backend
-		// narrows at the return boundary by consulting the fn's
-		// declared Return TypeId. This preserves the numeric
-		// value for widening casts and relies on codegen's
-		// explicit narrowing for downcasts.
-		//
-		// The checker has already validated that the source and
-		// target are compatible integer/bool/char types.
+		// W17 routes CastExpr through the tagged classifier so
+		// codegen sees a CastMode-carrying OpCast. Reference §28.1
+		// classification: widen / narrow / reinterpret / float↔int /
+		// pointer casts. A cast that classifyCast cannot resolve
+		// falls back to a passthrough so existing consteval-driven
+		// flows (e.g. const_fn.fuse `FACT_5 as I32`) continue to
+		// produce the same observable behaviour.
+		if reg, ok := l.lowerCastTagged(modPath, b, x, params); ok {
+			return reg, true
+		}
+		// Fallback: if classification failed but the inner
+		// expression is still lowerable, preserve the W14
+		// passthrough semantics.
 		return l.lowerExpr(modPath, b, x.Expr, params)
 	default:
 		l.diagnose(e.NodeSpan(),

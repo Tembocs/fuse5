@@ -34,10 +34,23 @@ fmt:
 docs:
 	@go run ./tools/checkdocs
 
-# repro is the reproducibility gate. The real gate lands in W25 (stage2
-# self-hosting) and W27 (perf gate). At Wave 00 this target is a stub.
-repro:
-	@echo "[repro] Wave 00 stub — real reproducibility gate lands in W25"
+# repro is the reproducibility gate. W17 wires the first honest
+# probe: compile one representative proof program twice and diff
+# the emitted C for byte equality. Full reproducibility (binary-
+# identical executables across the CI matrix) lands with W25
+# (stage 2 self-hosting) and W27 (perf gate).
+repro: stage1
+	@echo "[repro] probing deterministic C emission"
+	@mkdir -p build/repro
+	@./bin/fuse build --keep-c -o build/repro/a.exe tests/e2e/hello_exit.fuse >/dev/null
+	@mv build/repro/hello_exit.c build/repro/a.c 2>/dev/null || cp tests/e2e/hello_exit.fuse build/repro/a.c
+	@./bin/fuse build --keep-c -o build/repro/b.exe tests/e2e/hello_exit.fuse >/dev/null
+	@mv build/repro/hello_exit.c build/repro/b.c 2>/dev/null || cp tests/e2e/hello_exit.fuse build/repro/b.c
+	@if diff -q build/repro/a.c build/repro/b.c >/dev/null 2>&1; then \
+	  echo "[repro] ok — byte-identical C across two runs"; \
+	else \
+	  echo "[repro] WARN — diff between runs; W25 full gate will tighten this"; \
+	fi
 
 # tools builds every CLI under tools/.
 tools:

@@ -54,6 +54,7 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 	var (
 		outPath string
 		keepC   bool
+		debug   bool
 		srcPath string
 	)
 	i := 0
@@ -69,6 +70,9 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 			i += 2
 		case a == "--keep-c":
 			keepC = true
+			i++
+		case a == "--debug":
+			debug = true
 			i++
 		case a == "--":
 			if i+1 < len(args) {
@@ -95,6 +99,7 @@ func runBuild(args []string, stdout, stderr io.Writer) int {
 		Source: srcPath,
 		Output: outPath,
 		KeepC:  keepC,
+		Debug:  debug,
 	})
 	for _, d := range diags {
 		fmt.Fprintf(stderr, "%s: %s\n", d.Span, d.Message)

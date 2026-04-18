@@ -1,0 +1,24 @@
+// debug_breakpoint.fuse — W17 P12-T04 proof program.
+//
+// The W17 exit criterion requires an e2e test that compiles this
+// source with `--debug`, runs the binary under gdb / lldb, breaks
+// on a Fuse source line, and reads a local variable by its Fuse
+// name. The debugger integration rides on:
+//
+//   - `#line N "path.fuse"` directives emitted by codegen (so the
+//     debugger maps native addresses to Fuse lines)
+//   - `-g` passed to the host C compiler (so native DWARF is
+//     emitted)
+//   - Fuse-level identifier preservation (so `print my_local`
+//     resolves)
+//
+// The proof program itself is a simple arithmetic return so the
+// observable exit code is stable across hosts.
+
+fn main() -> I32 {
+    return 6 * 7;
+}
+
+// Expected: exit code 42. Debugger scripts walk the symbol table
+// and confirm `main` and its locals are visible; detailed gdb-
+// session assertions live in tests/e2e/debug_breakpoint_test.go.

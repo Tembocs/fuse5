@@ -124,6 +124,11 @@ type Options struct {
 	// "pthread" (-lpthread on POSIX, a no-op on Windows where
 	// threading is built into libc).
 	ExtraLibs []string
+	// Debug, when true, passes the host compiler's `-g` flag (or
+	// `/Zi` on MSVC) so native debuggers see Fuse source lines
+	// through the #line directives emitted by codegen. W17
+	// Phase 12 — bootstrap debug-info rides on the C backend.
+	Debug bool
 }
 
 // Compile invokes c on cInputPath and produces a native binary at
@@ -143,10 +148,29 @@ func (c *Compiler) Compile(cInputPath, outBinaryPath string) error {
 // populated Options; the legacy Compile call produces the same
 // invocation as W05 (no runtime linkage).
 func (c *Compiler) CompileWith(cInputPath, outBinaryPath string, opts Options) error {
+	args := BuildCompileArgs(c.Kind, cInputPath, outBinaryPath, opts)
+	cmd := exec.Command(c.Path, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s failed: %v\n%s", c.Kind, err, out)
+	}
+	return nil
+}
+
+// BuildCompileArgs is the pure arg-vector builder CompileWith
+// delegates to. Exposed so tests can verify the argv shape
+// (debug-flag passthrough, include-dir ordering, extra-lib
+// injection) without spawning the compiler. Reference §57 fixes
+// the C11 build-invocation contract; this function is the single
+// source of truth for that invocation.
+func BuildCompileArgs(kind Kind, cInputPath, outBinaryPath string, opts Options) []string {
 	var args []string
-	switch c.Kind {
+	switch kind {
 	case KindMSVC:
 		args = []string{"/std:c11", "/nologo", "/TC"}
+		if opts.Debug {
+			args = append(args, "/Zi")
+		}
 		for _, inc := range opts.IncludeDirs {
 			args = append(args, "/I"+inc)
 		}
@@ -158,6 +182,9 @@ func (c *Compiler) CompileWith(cInputPath, outBinaryPath string, opts Options) e
 		}
 	default:
 		args = []string{"-std=c11"}
+		if opts.Debug {
+			args = append(args, "-g")
+		}
 		for _, inc := range opts.IncludeDirs {
 			args = append(args, "-I"+inc)
 		}
@@ -167,10 +194,5 @@ func (c *Compiler) CompileWith(cInputPath, outBinaryPath string, opts Options) e
 			args = append(args, "-l"+lib)
 		}
 	}
-	cmd := exec.Command(c.Path, args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%s failed: %v\n%s", c.Kind, err, out)
-	}
-	return nil
+	return args
 }
