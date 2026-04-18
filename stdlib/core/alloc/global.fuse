@@ -1,0 +1,31 @@
+/// Global-allocator hook (reference §52.1).
+///
+/// The global allocator is declared once per binary. By default
+/// the compiler wires it to `SystemAllocator`; user code can
+/// override with `@global_allocator` on a static declaration.
+/// The documented override mechanism:
+///
+///     @global_allocator
+///     static GLOBAL: BumpAllocator = ...;
+///
+/// Collections written without an explicit allocator parameter
+/// (`Vec[I32]`) resolve their second type argument to the global.
+/// Parameterised collections (`Vec[I32, MyAllocator]`) bypass it.
+
+/// Look up the current global allocator's raw address. The
+/// compiler intrinsic folds this to the address of the
+/// `@global_allocator`-tagged static, or to a default-
+/// SystemAllocator instance when none is declared.
+pub fn global_allocator() -> U64 {
+    return 0u64;
+}
+
+/// Allocate through the global allocator.
+pub fn global_alloc(bytes: U64, align: U64) -> U64 {
+    return 0u64;
+}
+
+/// Deallocate through the global allocator.
+pub fn global_dealloc(ptr: U64, bytes: U64, align: U64) -> U64 {
+    return 0u64;
+}

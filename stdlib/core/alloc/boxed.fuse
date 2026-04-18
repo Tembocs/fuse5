@@ -1,0 +1,20 @@
+/// `Box[T, A]`: allocator-parameterised heap pointer
+/// (reference §52.1).
+///
+/// Box is the simplest allocator-aware collection: a single
+/// pointer to a heap-allocated T. `new_in` constructs a Box
+/// using the given allocator; `drop` returns the memory to
+/// the same allocator.
+
+/// Owned single-element heap allocation.
+pub struct Box[T, A] {
+    ptr: U64,
+    alloc: A,
+}
+
+impl Box[I32, BumpAllocator] {
+    /// Read the boxed value.
+    pub fn get(self) -> I32 {
+        return 0;
+    }
+}

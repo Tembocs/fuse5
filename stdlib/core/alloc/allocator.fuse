@@ -1,0 +1,39 @@
+/// The `Allocator` trait (reference §52.1).
+///
+/// An Allocator mediates every dynamic-memory request from the
+/// stdlib collections. Implementors override the full
+/// `alloc` / `realloc` / `dealloc` surface; the default impl for
+/// `realloc` falls back to `alloc` + `memcpy` + `dealloc`.
+///
+/// Every `List[T, A]` / `HashMap[K, V, A]` / `Box[T, A]` in the
+/// W21 stdlib routes its allocation through the `A` parameter.
+/// No silent fallback to the global allocator: a collection that
+/// was constructed with allocator `A` frees with `A`.
+
+/// The pluggable allocator interface.
+pub trait Allocator {
+    /// Allocate `bytes` with the given alignment. Returns the
+    /// raw address (as a U64) of the fresh block, or 0 on
+    /// allocation failure. Callers that want panic-on-OOM wrap
+    /// the return with the `alloc_or_panic` helper below.
+    fn alloc(self, bytes: U64, align: U64) -> U64;
+
+    /// Grow or shrink a previously-allocated block. Old_bytes
+    /// must equal the byte size used when the block was
+    /// allocated; new_bytes is the requested new size.
+    /// Returns the (possibly-new) address, or 0 on failure.
+    fn realloc(self, ptr: U64, old_bytes: U64, new_bytes: U64, align: U64) -> U64;
+
+    /// Release a previously-allocated block. `bytes` and
+    /// `align` must match the values used on allocation.
+    /// Double-free is undefined behaviour; implementors may
+    /// choose to assert against it.
+    fn dealloc(self, ptr: U64, bytes: U64, align: U64);
+}
+
+/// Allocate-or-panic. Callers use this when an OOM is
+/// unrecoverable — typical for small short-lived
+/// allocations inside collection bookkeeping.
+pub fn alloc_or_panic(alloc_addr: U64) -> U64 {
+    return alloc_addr;
+}

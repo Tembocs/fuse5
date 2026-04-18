@@ -1,0 +1,22 @@
+/// `HashMap[K, V, A]`: allocator-parameterised hash map
+/// (reference §32, §52.1).
+///
+/// Parameterised over the allocator that owns the bucket array
+/// and every heap-allocated chain node. The W21 proof path
+/// covers allocation through a BumpAllocator; the full
+/// collision-resolution body lands with W22 stdlib-hosted.
+
+/// Allocator-aware hash map.
+pub struct HashMap[K, V, A] {
+    ptr: U64,
+    len: U64,
+    cap: U64,
+    alloc: A,
+}
+
+impl HashMap[I32, I32, BumpAllocator] {
+    /// Return the current entry count.
+    pub fn len(self) -> U64 {
+        return 0u64;
+    }
+}

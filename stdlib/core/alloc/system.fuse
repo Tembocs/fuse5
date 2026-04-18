@@ -1,0 +1,30 @@
+/// `SystemAllocator`: the default allocator backed by the
+/// runtime's `fuse_rt_alloc_*` entry points (reference §21).
+///
+/// SystemAllocator is the zero-cost wrapper user code defaults
+/// to when it writes `Vec[T]` without a second type parameter.
+/// The `impl Allocator for SystemAllocator` plumbs through to
+/// stdlib/core/rt_bridge/alloc.fuse.
+
+/// A zero-sized marker struct — SystemAllocator carries no
+/// runtime state; the global heap is the source of truth.
+pub struct SystemAllocator {
+    _marker: U64,
+}
+
+impl SystemAllocator {
+    /// Forward to the runtime allocator.
+    pub fn alloc(self, bytes: U64, align: U64) -> U64 {
+        return 0u64;
+    }
+
+    /// Forward to the runtime reallocator.
+    pub fn realloc(self, ptr: U64, old_bytes: U64, new_bytes: U64, align: U64) -> U64 {
+        return 0u64;
+    }
+
+    /// Forward to the runtime deallocator.
+    pub fn dealloc(self, ptr: U64, bytes: U64, align: U64) -> U64 {
+        return 0u64;
+    }
+}

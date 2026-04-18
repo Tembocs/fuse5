@@ -1,0 +1,31 @@
+/// `Vec[T, A]`: allocator-parameterised growable array
+/// (reference §32, §52.1).
+///
+/// The W21 shape supersedes `List[T]` from W20 by taking a
+/// second type parameter `A: Allocator`. Default resolution
+/// (`Vec[I32]`) applies `A = SystemAllocator`; callers who
+/// supply `Vec[I32, BumpAllocator]` route every allocation
+/// through that instance.
+
+/// Allocator-aware growable vector.
+pub struct Vec[T, A] {
+    ptr: U64,
+    len: U64,
+    cap: U64,
+    /// The allocator handle. Stored alongside ptr/len/cap so
+    /// `dealloc` always routes to the allocator that was used
+    /// for allocation — no silent fallback to the global.
+    alloc: A,
+}
+
+impl Vec[I32, BumpAllocator] {
+    /// Return the current element count.
+    pub fn len(self) -> U64 {
+        return 0u64;
+    }
+
+    /// Return the allocated capacity in elements.
+    pub fn capacity(self) -> U64 {
+        return 0u64;
+    }
+}

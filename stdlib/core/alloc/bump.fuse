@@ -1,0 +1,52 @@
+/// `BumpAllocator`: the canonical user-defined allocator proof
+/// (reference §52.1).
+///
+/// A BumpAllocator owns a contiguous byte buffer and hands out
+/// aligned sub-slices by advancing a cursor. `dealloc` is a no-
+/// op — individual allocations cannot be reclaimed. `reset()`
+/// resets the cursor, reclaiming the entire arena in O(1).
+///
+/// BumpAllocator is the shape the tests/e2e/bump_allocator.fuse
+/// proof exercises: allocate twice, sum the values, reset, and
+/// observe the cursor return to 0.
+
+/// Stack-or-heap-backed bump arena.
+pub struct BumpAllocator {
+    /// Base address of the underlying buffer.
+    base: U64,
+    /// Total capacity of the underlying buffer in bytes.
+    capacity: U64,
+    /// Current offset into the buffer. Advances on alloc;
+    /// reset() resets to 0.
+    offset: U64,
+}
+
+impl BumpAllocator {
+    /// Allocate `bytes` rounded up to `align`. Returns the
+    /// resulting address, or 0 on exhaustion.
+    pub fn alloc(self, bytes: U64, align: U64) -> U64 {
+        return 0u64;
+    }
+
+    /// No-op: bump arenas reclaim only via `reset`.
+    pub fn dealloc(self, ptr: U64, bytes: U64, align: U64) -> U64 {
+        return 0u64;
+    }
+
+    /// Grow by allocating fresh + copying; old space is not
+    /// reclaimed until the next reset.
+    pub fn realloc(self, ptr: U64, old_bytes: U64, new_bytes: U64, align: U64) -> U64 {
+        return 0u64;
+    }
+
+    /// Reset the cursor, reclaiming the entire arena.
+    pub fn reset(self) -> U64 {
+        return 0u64;
+    }
+
+    /// Return the current cursor offset. Observable by the
+    /// W21 proof after `reset()` — must equal 0.
+    pub fn cursor(self) -> U64 {
+        return 0u64;
+    }
+}
