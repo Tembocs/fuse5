@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var foundationalDocs = []string{
@@ -58,8 +59,19 @@ var perWaveDocs = []string{
 
 func main() {
 	var foundational bool
+	var registryFrozen bool
 	flag.BoolVar(&foundational, "foundational", false, "check only the five foundational docs")
+	flag.BoolVar(&registryFrozen, "registry-protocol-frozen", false, "verify docs/registry-protocol.md carries the frozen-spec marker (W23)")
 	flag.Parse()
+
+	if registryFrozen {
+		if err := checkRegistryProtocolFrozen(); err != nil {
+			fmt.Fprintf(os.Stderr, "checkdocs: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("checkdocs: registry-protocol frozen")
+		return
+	}
 
 	var files []string
 	if foundational {
@@ -93,4 +105,23 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("checkdocs: ok")
+}
+
+// checkRegistryProtocolFrozen is the W23 gate: the registry-
+// protocol spec must exist, be non-empty, and carry the
+// literal `frozen: true` marker so downstream consumers can
+// rely on the wire format not drifting.
+func checkRegistryProtocolFrozen() error {
+	path := filepath.FromSlash("docs/registry-protocol.md")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("docs/registry-protocol.md: %w", err)
+	}
+	if len(body) == 0 {
+		return fmt.Errorf("docs/registry-protocol.md: empty")
+	}
+	if !strings.Contains(string(body), "frozen: true") {
+		return fmt.Errorf("docs/registry-protocol.md: missing `frozen: true` marker (W23 requires the spec to be frozen)")
+	}
+	return nil
 }

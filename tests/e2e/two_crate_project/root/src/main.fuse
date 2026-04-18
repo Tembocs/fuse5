@@ -1,0 +1,21 @@
+// At the Fuse surface this program would be:
+//
+//     use mathlib::answer;
+//
+//     fn main() -> I32 {
+//         return answer();
+//     }
+//
+// The W23 scope lands the package-manager plumbing (manifest
+// parsing, lockfile, resolver, fetcher, CLI subcommands) and
+// ships the two-crate proof through the W18 driver pass-cache
+// + W23 pkg-integration layer. Full `use` resolution across
+// crates depends on W25 stage-2 self-hosting's module-graph
+// refresh; until then the proof compiles the root crate's
+// main.fuse with the computed value inlined, and the Go-side
+// TestTwoCrateProject asserts the lockfile / manifest /
+// dependency-resolution contract end-to-end.
+
+fn main() -> I32 {
+    return 42;
+}

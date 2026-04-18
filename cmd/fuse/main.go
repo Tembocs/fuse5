@@ -61,6 +61,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runRepl(stdout, stderr)
 	case "lsp":
 		return runLsp(stderr)
+	case "add":
+		return runPkgAdd(args[1:], stdout, stderr)
+	case "remove":
+		return runPkgRemove(args[1:], stdout, stderr)
+	case "update":
+		return runPkgUpdate(args[1:], stdout, stderr)
+	case "vendor":
+		return runPkgVendor(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "fuse: unknown subcommand %q; see `fuse help`\n", args[0])
 		return 2
@@ -84,6 +92,10 @@ func runHelp(stdout io.Writer) int {
 	fmt.Fprintln(stdout, "  doc <file>                  extract doc comments; --check flags missing docs on pub items")
 	fmt.Fprintln(stdout, "  repl                        interactive read-eval-print loop")
 	fmt.Fprintln(stdout, "  lsp                         start a Language Server Protocol session over stdio")
+	fmt.Fprintln(stdout, "  add <name>[@<ver>]          add a dependency to fuse.toml")
+	fmt.Fprintln(stdout, "  remove <name>               remove a dependency from fuse.toml")
+	fmt.Fprintln(stdout, "  update [<name>]             refresh the lockfile (all crates or the named one)")
+	fmt.Fprintln(stdout, "  vendor [<dir>]              materialise every transitive dependency under vendor/")
 	return 0
 }
 

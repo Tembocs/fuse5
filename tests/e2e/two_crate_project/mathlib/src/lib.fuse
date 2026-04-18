@@ -1,0 +1,4 @@
+/// The canonical answer.
+pub fn answer() -> I32 {
+    return 42;
+}
