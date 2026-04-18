@@ -1,6 +1,6 @@
 {
-  "current_wave": "W18",
-  "current_phase": "PCL",
+  "current_wave": "W19",
+  "current_phase": "P00",
   "updated": "2026-04-18",
-  "notes": "CLI and diagnostics wave in closure phase. CLI-surface stub retired: cmd/fuse/main.go wires every subcommand (build / run / check / test / fmt / doc / repl / version / help) with the 0/1/2 exit-code contract; compiler/diagnostics renders Rendered text + JSON and runs AuditRule617; compiler/fmt.Format is byte-stable and idempotent; compiler/doc extracts `///` comments and flags missing pub docs (Rule 5.6); compiler/repl runs a deterministic arithmetic + bool-logic evaluator; compiler/driver/cache.go is the content-addressed pass cache with version-mismatch invalidation and deterministic Key/Combine. Tests: TestSubcommandParser, TestTextRendering, TestJsonRendering, TestDiagnosticQualityRule, TestFormatStable, TestDocCheck, TestReplRoundTrip, TestReplErrors, TestReplSessionTermination, TestPassCache (plus Determinism + Corruption), TestIncrementalRebuild, TestCliBasicWorkflow, TestIncrementalEditCycle. STUBS.md W18 history block appended; WC018 logged using Rule 10.2 mandated 6-field template. Twelfth full wave under Rule 9.5 three-commit discipline: P00 audit (5ecb296), implementation (2abb4a2), PCL (this commit). Next: enter W19 Language Server (LSP 3.17)."
+  "notes": "Language Server wave entered. Rule 9.5 P00 commit. `go run tools/checkstubs/main.go -wave W19 -phase P00` exits 0. Implementation lands next: compiler/lsp/ gets JSON-RPC stdio transport, LSP 3.17 initialize/capability negotiation, document sync, streaming diagnostics, hover, goto-def, completion, document symbols, semantic tokens, quick-fix code actions, plus a fuse lsp CLI subcommand and a headless scripted-session e2e."
 }
