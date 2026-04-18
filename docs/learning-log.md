@@ -3018,3 +3018,173 @@ grep "WC015" docs/learning-log.md
 All commands exited 0 on this machine (windows/amd64,
 go1.22+, MinGW gcc 13.x). CI matrix green on the committed
 SHA is the authoritative record.
+
+### WC016 — Wave 16 Closure
+
+Date: 2026-04-18
+Wave: 16 — Runtime ABI
+
+**Proof programs added this wave**:
+- `tests/e2e/spawn_observable.fuse` documenting the surface-
+  Fuse form of the spawn proof (worker + main that spawns and
+  joins, returning 42 as I32). Driving test:
+  `TestSpawnObservable` in `tests/e2e/spawn_observable_test.go`
+  which constructs the MIR equivalent directly, emits C,
+  links libfuse_rt.a, runs the native binary, and asserts
+  exit 42.
+- `tests/e2e/channel_round_trip.fuse` documenting the surface-
+  Fuse form of the channel proof (producer + main that
+  allocates a bounded channel, spawns a worker, sends 42,
+  receives, joins). Driving test: `TestChannelRoundTrip` in
+  `tests/e2e/channel_round_trip_test.go` with the same
+  construct-MIR / emit / link / run / assert shape.
+- Five C-level smoke tests under `runtime/tests/c/`:
+  `test_memory` (alloc / realloc up-and-down / aligned free),
+  `test_io` (stdout + stderr writes + zero-length write),
+  `test_process` (pid + monotonic non-decreasing + wall_ns +
+  sleep_ns), `test_thread` (spawn + join + distinct
+  thread ids + yield), `test_sync` (4-thread mutex with 4000
+  total increments, condvar wakeup, 5-value channel round
+  trip + closed-channel FUSE_CHAN_CLOSED semantics + try_send/
+  try_recv on closed).
+
+**Stubs retired this wave**:
+- "Runtime ABI (threads, channels, panic, IO)" — removed from
+  `STUBS.md` Active table at this PCL commit. Confirmed by
+  `go run tools/checkstubs/main.go -wave W16` and `go run
+  tools/checkstubs/main.go -history-current-wave W16`, both
+  exiting 0. Proof surface enumerated in the W16 block of
+  the `STUBS.md` Stub history.
+
+**Stubs introduced this wave**:
+None. The remaining rows (W17 Codegen C11 hardening, W18
+CLI, W19 LSP, W20+ stdlib) retain their existing stubs. W16
+also leaves the Fuse-surface for spawn / channel method calls
+unfinished — closure-to-fn-ptr lifting and the ThreadHandle /
+Chan method tables are W17/W22 concerns, documented in the
+spawn_observable.fuse and channel_round_trip.fuse "Implementation
+status" comments so a reader of those files sees the bridge
+clearly.
+
+**What was harder than planned**:
+- Windows `CONDITION_VARIABLE` / `SRWLOCK` / `_beginthreadex`
+  require `_WIN32_WINNT >= 0x0600` and MinGW's thread-model-
+  suffixed build. The runtime Makefile now hard-forces
+  `CC := gcc` on Windows (tcc and bundled cc variants lack
+  the headers) and adds `-D_WIN32_WINNT=0x0601`. Other
+  Windows compilers need their own host-probe path; MSVC
+  would work without the define since its default target
+  already includes the API.
+- The generated C uses `fuse_rt_thread_spawn((int64_t(*)(void*))&entry, arg)`
+  — an ABI-level function-pointer cast. On x86_64 SysV and
+  MSVC-x64, integer-register parameters and pointer
+  parameters share the same registers, so the cast works for
+  `int64_t entry(int64_t)` signatures (the runtime
+  trampoline does `int64_t result = t->entry(t->arg)` with
+  `arg` typed as `void *`). This is technically UB —
+  mismatched fn-ptr signatures through the cast — but is
+  ABI-correct on the current target matrix. W17 codegen
+  hardening will emit a per-spawn thunk that legitimises the
+  signature (`static int64_t thunk(void *arg) { return
+  worker((int64_t)(intptr_t)arg); }`) and replace the
+  current cast.
+- The surface-level `.fuse` e2e proofs are deferred because
+  closure-to-fn-ptr lifting is still missing. Spawn expects
+  a fn-pointer entry; the HIR `SpawnExpr` wraps a
+  `ClosureExpr`; the lowerer currently inlines no-capture
+  closures (W12). For spawn, we need the closure body lifted
+  to a top-level fn whose address can be taken. Rather than
+  squeeze that pass into W16, the e2e tests build the MIR
+  directly — exercising every runtime entry point through
+  the real native binary path — and the `.fuse` files
+  document the intended surface syntax.
+- `runtime/tests/` originally colocated `.c` and `.go`
+  files, which broke `go test ./runtime/...` with "C source
+  files not allowed when not using cgo or SWIG". Moved every
+  `test_*.c` into `tests/c/` and updated `runtime/Makefile`
+  accordingly. The pattern matches other projects' dual-
+  language test trees (Go checker beside C smoke tests).
+- TinyCC on the local Windows host is named `cc`, and cannot
+  read gcc-produced static libraries. The e2e tests now set
+  `CC=gcc` before calling `cc.Detect` so the compile+link
+  step uses gcc consistently. The helper
+  `preferGCCForRuntimeTests` is a test-only shim; production
+  `fuse build` respects the user's `CC` without overriding.
+
+**What the next wave must know**:
+- `fuse_rt_chan_new(capacity, elem_bytes)` takes element size
+  at creation — the channel is typed by bytes, not by Fuse
+  type. Callers must pass `size_of[T]()` (W14 intrinsic) or
+  an equivalent `sizeof(T)` when calling from C. W17 codegen
+  hardening should auto-fill `elem_bytes` from the HIR
+  channel's type parameter.
+- The channel result codes are declared as macros
+  (`FUSE_CHAN_OK = 0`, `FUSE_CHAN_CLOSED = 1`,
+  `FUSE_CHAN_WOULD_BLOCK = 2`). W22 stdlib-hosted will map
+  these to a `ChanResult[T]` enum surface; until then, the
+  compiler treats them as raw int32_t.
+- `fuse_rt_thread_join(handle)` returns `int64_t`. The W16
+  surface deliberately does not expose a `Result[T,
+  ThreadError]` shape because `Result` depends on stdlib,
+  which is W20. When W20 lands, the lowerer should wrap
+  `OpThreadJoin`'s destination in an Ok / Err constructor
+  based on a future runtime-side "thread error" side-channel.
+  The current ABI returns bare `int64_t` and panics from the
+  thread if the entry fn panics — no recoverable error path
+  exists yet.
+- `TermUnreachable` now emits `fuse_rt_abort("unreachable")`
+  as a belt-and-braces guard. Codegen's `UsesRuntimeABI`
+  predicate pulls in `fuse_rt.h` for any module that has
+  either a W16 op or a divergent block. W17 codegen
+  hardening can tighten this to annotate the unreachable
+  point with `__builtin_unreachable()` when an optimizing
+  compiler can prove divergence — the fuse_rt_abort call
+  stays as the correctness ground truth.
+- `compiler/driver/runtime.go:locateRuntimeArtifacts` is the
+  authoritative entry point for runtime linkage. It honours
+  `FUSE_RUNTIME_DIR` for CI / packaging, and otherwise walks
+  up from the driver source to find `runtime/include/fuse_rt.h`.
+  The `runtimeBuildOnce` sync.Once means the first build
+  invocation in a process bootstraps the archive; subsequent
+  invocations re-use it. CI images that pre-build the
+  runtime skip the `make` call because `libfuse_rt.a` is
+  already present.
+- `cc.Options{IncludeDirs, ExtraObjects, ExtraLibs}` is the
+  canonical shape for extra compile inputs. W17 (codegen
+  hardening) can extend with ExtraFlags if warnings-as-errors
+  or sanitizer flags enter the runtime build; the shape is
+  ready.
+- The spawn proof program uses the `int64_t worker(int64_t)`
+  entry shape. Extending to multi-arg spawn closures — the
+  way surface-level `spawn move |...| { ... }` will produce
+  an entry fn with captured env plus user args — requires
+  closure lifting (W12 continuation). The MIR's `OpSpawn`
+  already accepts `CallArgs` with more than one entry (the
+  Builder.Spawn wrapper currently caps at one), so the
+  downstream lifts need only pass the env+args pair
+  through the existing op.
+- `runtime/Makefile`'s platform detection recognises MinGW,
+  MSYS, Cygwin, and native-Windows (OS=Windows_NT) as
+  "windows"; Darwin as "macos"; everything else as "linux".
+  Adding a target matrix entry is one additional `ifneq`
+  branch — no structural change.
+
+**Verification**:
+```
+go test ./...
+go run tools/checkruntime/main.go -header-syntax
+make runtime-test
+go test ./compiler/codegen/... -run TestSpawnEmission -v
+go test ./compiler/codegen/... -run TestJoinEmission -v
+go test ./compiler/codegen/... -run TestChannelOpsEmission -v
+go test ./compiler/codegen/... -run TestPanicEmission -v
+go test ./tests/e2e/... -run TestSpawnObservable -v
+go test ./tests/e2e/... -run TestChannelRoundTrip -v
+go run tools/checkstubs/main.go -wave W16 -phase P00
+go run tools/checkstubs/main.go -wave W16
+go run tools/checkstubs/main.go -history-current-wave W16
+grep "WC016" docs/learning-log.md
+```
+All commands exited 0 on this machine (windows/amd64,
+MinGW-W64 gcc 15.x, go1.22+). CI matrix green on the
+committed SHA is the authoritative record.

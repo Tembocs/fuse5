@@ -28,7 +28,6 @@ number when it lands the feature.
 
 | Stub | File:Line | Current behavior | Diagnostic emitted | Retiring wave |
 |---|---|---|---|---|
-| Runtime ABI (threads, channels, panic, IO) | runtime/src/ (W05 fuse_rt_abort only; threads/channels/IO call abort with "not yet implemented") | stub runtime entries abort at runtime | "runtime not yet implemented" | W16 |
 | Codegen C11 hardening (`@repr`, `@align`, `@inline`, intrinsics, variadic, debug info, perf baseline) | compiler/codegen/ (W05 emitter only; no hardening) | hardening decorators are ignored by the W05 emitter | "C11 codegen not yet implemented" | W17 |
 | CLI, diagnostics, `fuse fmt/doc/repl`, incremental driver, Rule 6.17 audit | compiler/driver/ (W05 `build` subcommand only; no `run`/`check`/`test`/`fmt`/`doc`/`repl`, no incremental driver) | unimplemented subcommands exit non-zero with a usage message | "subcommand not yet implemented" | W18 |
 | Language server (LSP 3.17) | compiler/ (not yet created lsp/) | no LSP server | "fuse lsp not yet implemented" | W19 |
@@ -586,5 +585,52 @@ Retired:
   Codegen C11 emission for the W15 ops is scheduled to W17 per
   Rule 6.9 — the default case in emitInst returns the expected
   "unsupported MIR op" diagnostic until then.
+
+Rescheduled: (none this wave)
+
+### W16 — Runtime ABI
+
+Added: (none this wave)
+
+Retired:
+- Runtime ABI (threads, channels, panic, IO)
+  (runtime/include/fuse_rt.h expanded to 31 functions;
+  runtime/src/{abort,memory,io,process,time,thread,sync,chan}.c;
+  runtime/Makefile; runtime/tests/c/test_{memory,io,process,
+  thread,sync}.c; tools/checkruntime/main.go;
+  compiler/mir/w16_ops.go + w16_builder.go + w16_validate.go;
+  compiler/codegen/c11.go W16 op emission and
+  codegen.UsesRuntimeABI; compiler/cc/compiler.go Options /
+  CompileWith; compiler/driver/runtime.go locateRuntimeArtifacts;
+  tests/e2e/spawn_observable.fuse + spawn_observable_test.go;
+  tests/e2e/channel_round_trip.fuse + channel_round_trip_test.go) —
+  confirmed retired by `make runtime-test`, `cd runtime && make
+  test`, `go run tools/checkruntime/main.go -header-syntax`,
+  `go test ./compiler/codegen/... -run TestSpawnEmission -v`,
+  `go test ./compiler/codegen/... -run TestJoinEmission -v`,
+  `go test ./compiler/codegen/... -run TestChannelOpsEmission -v`,
+  `go test ./compiler/codegen/... -run TestPanicEmission -v`,
+  `go test ./tests/e2e/... -run TestSpawnObservable -v`, and
+  `go test ./tests/e2e/... -run TestChannelRoundTrip -v`. Proof
+  surface: the C runtime builds on Windows (MinGW gcc with
+  -D_WIN32_WINNT=0x0601 for CONDITION_VARIABLE) and has a POSIX
+  code path gated by !defined(_WIN32); five C smoke tests
+  (test_memory, test_io, test_process, test_thread, test_sync)
+  exercise every subsystem including multi-thread mutex / condvar
+  / channel scenarios with 4000 concurrent increments, condvar
+  wakeup, and a five-value channel round-trip + closed-channel
+  semantics. Runtime_test.go asserts every required function
+  appears in both fuse_rt.h and runtime/src/*.c. Checkruntime
+  validates balanced braces, guard macros, extern "C" wrapper,
+  and the header↔source mapping. Codegen unit tests
+  (TestSpawnEmission / TestJoinEmission / TestChannelOpsEmission /
+  TestPanicEmission) confirm each MIR op emits the right
+  fuse_rt_* call with the right argument shape. End-to-end e2e
+  tests (TestSpawnObservable, TestChannelRoundTrip) build the
+  MIR equivalent of the .fuse proof programs, emit C, link
+  libfuse_rt.a via cc.CompileWith, run the native binary, and
+  assert exit code 42 — proving that fuse_rt_thread_spawn +
+  _join, and fuse_rt_chan_new + _send + _recv + _close, all
+  work end-to-end when reached from compiled Fuse-shaped code.
 
 Rescheduled: (none this wave)
