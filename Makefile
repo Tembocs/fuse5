@@ -8,9 +8,15 @@ stage1:
 	@echo "[stage1] building cmd/fuse"
 	@go build -o bin/fuse ./cmd/fuse
 
-# runtime: at Wave 00 the C runtime is an empty directory. Real build lands in W16.
+# runtime builds the C runtime static library (W16) and runs its
+# unit tests. Delegates to runtime/Makefile which handles platform
+# detection and compiler selection.
 runtime:
-	@echo "[runtime] Wave 00 stub — real C runtime lands in W16 (runtime/src/)"
+	@echo "[runtime] building libfuse_rt.a"
+	@$(MAKE) -C runtime all
+
+runtime-test: runtime
+	@$(MAKE) -C runtime test
 
 # test runs the Go unit test suite across compiler/, cmd/, and tools/.
 test:
@@ -39,12 +45,13 @@ tools:
 
 help:
 	@echo "Targets:"
-	@echo "  all       - stage1 + runtime (default)"
-	@echo "  stage1    - build the Stage 1 Go compiler CLI"
-	@echo "  runtime   - build the C runtime (W00 stub; real in W16)"
-	@echo "  test      - run all Go tests"
-	@echo "  clean     - remove build outputs"
-	@echo "  fmt       - run gofmt"
-	@echo "  docs      - validate documentation"
-	@echo "  repro     - reproducibility gate (W00 stub; real in W25)"
-	@echo "  tools     - build every tools/ CLI"
+	@echo "  all            - stage1 + runtime (default)"
+	@echo "  stage1         - build the Stage 1 Go compiler CLI"
+	@echo "  runtime        - build the C runtime libfuse_rt.a (W16)"
+	@echo "  runtime-test   - build runtime and run the C test suite"
+	@echo "  test           - run all Go tests"
+	@echo "  clean          - remove build outputs"
+	@echo "  fmt            - run gofmt"
+	@echo "  docs           - validate documentation"
+	@echo "  repro          - reproducibility gate (W00 stub; real in W25)"
+	@echo "  tools          - build every tools/ CLI"

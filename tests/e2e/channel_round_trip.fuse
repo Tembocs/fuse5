@@ -1,0 +1,36 @@
+// channel_round_trip.fuse — W16 proof program (conceptual source).
+//
+// At the Fuse surface this program is:
+//
+//     fn producer(ch: Chan[I64]) -> I64 {
+//         ch.send(42);
+//         ch.close();
+//         return 0;
+//     }
+//
+//     fn main() -> I32 {
+//         let ch: Chan[I64] = Chan.new(1);
+//         let h = spawn fn() { producer(ch); };
+//         let got: I64 = ch.recv();
+//         h.join();
+//         return got as I32;
+//     }
+//
+// Expected exit code: 42.
+//
+// Implementation status
+// ---------------------
+// The surface-level Chan / spawn plumbing depends on move-semantic
+// support for Chan[T] ownership across the spawn boundary, which
+// layers on top of the W12 closure-lifting work. Until that layer
+// is complete, the W16 channel proof constructs the equivalent MIR
+// programmatically in channel_round_trip_test.go: a main fn
+// allocates a channel, spawns a worker that sends the value 42
+// and closes, receives the value back, joins the worker, and
+// returns the received value as the program's exit code.
+//
+// The proof does exercise the full runtime: fuse_rt_chan_new,
+// fuse_rt_thread_spawn, fuse_rt_chan_send, fuse_rt_chan_recv,
+// fuse_rt_chan_close, and fuse_rt_thread_join are all invoked and
+// their ordered effects produce the 42 that main returns. WC016
+// tracks the residual surface-syntax work.

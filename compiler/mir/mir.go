@@ -118,6 +118,20 @@ func (o Op) String() string {
 		return "saturating_sub"
 	case OpSaturatingMul:
 		return "saturating_mul"
+	case OpSpawn:
+		return "spawn"
+	case OpThreadJoin:
+		return "thread_join"
+	case OpChanNew:
+		return "chan_new"
+	case OpChanSend:
+		return "chan_send"
+	case OpChanRecv:
+		return "chan_recv"
+	case OpChanClose:
+		return "chan_close"
+	case OpPanic:
+		return "panic"
 	}
 	return "unknown"
 }
@@ -445,10 +459,17 @@ func (f *Function) Validate() error {
 					return fmt.Errorf("mir.Validate: %s/block %d inst %d: drop target register %d is undefined", f.Name, blk.ID, i, in.Lhs)
 				}
 			default:
-				// W15 consolidation ops are all numeric >= OpCast.
-				// Route them through the W15 validator; if it does
-				// not recognise the op, fall through to the unknown
-				// op error below.
+				// W16 runtime-ABI ops are numeric >= OpSpawn.
+				// W15 consolidation ops are numeric >= OpCast (but
+				// less than OpSpawn). Route through the matching
+				// validator; if neither recognises the op, fall
+				// through to the unknown-op error below.
+				if in.Op >= OpSpawn {
+					if err := validateW16Inst(f, blk, i, in, defined); err != nil {
+						return err
+					}
+					break
+				}
 				if in.Op >= OpCast {
 					if err := validateW15Inst(f, blk, i, in, defined); err != nil {
 						return err

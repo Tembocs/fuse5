@@ -1,0 +1,32 @@
+// spawn_observable.fuse — W16 proof program (conceptual source).
+//
+// At the Fuse surface this program is:
+//
+//     fn worker(arg: I64) -> I64 {
+//         return arg + 21;
+//     }
+//
+//     fn main() -> I32 {
+//         let h = spawn fn(x: I64) -> I64 { return worker(x); };
+//         // pass x = 21 as the spawned thread's argument (not yet
+//         // expressible in surface spawn syntax — see WC016)
+//         return h.join() as I32;
+//     }
+//
+// Expected exit code: 42.
+//
+// Implementation status
+// ---------------------
+// The full Fuse surface for spawn closures with captured / argument-
+// passed state depends on closure-to-fn-ptr lifting, which is W12
+// work that completes alongside codegen hardening (W17). Until that
+// pass is in place, the W16 proof exercises the same runtime path
+// by constructing the equivalent MIR programmatically in
+// spawn_observable_test.go — compile, link libfuse_rt.a, run the
+// native binary, and assert the exit code.
+//
+// The behaviour observed is exactly the behaviour this source
+// describes: a worker thread computes 21 + 21, main joins, and
+// returns 42 as I32. Bridging this source to the MIR test is a
+// surface-syntax concern, not a runtime-ABI concern. WC016 tracks
+// the residual work explicitly.

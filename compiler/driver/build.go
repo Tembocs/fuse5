@@ -181,7 +181,23 @@ func Build(opts BuildOptions) (*BuildResult, []lex.Diagnostic, error) {
 	if binPath == "" {
 		binPath = deriveBinaryPath(opts.Source)
 	}
-	if err := cc1.Compile(cPath, binPath); err != nil {
+
+	// Programs that emit W16 runtime-ABI calls or TermUnreachable
+	// need fuse_rt.h visible and libfuse_rt.a linked. The driver
+	// locates the runtime next to the Fuse repo root and builds
+	// the archive on demand so e2e tests stay hermetic.
+	ccOpts := cc.Options{}
+	if codegen.UsesRuntimeABI(mirMod) {
+		rtIncludes, rtObjects, rtLibs, rtErr := locateRuntimeArtifacts()
+		if rtErr != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("runtime setup: %w", rtErr)
+		}
+		ccOpts.IncludeDirs = rtIncludes
+		ccOpts.ExtraObjects = rtObjects
+		ccOpts.ExtraLibs = rtLibs
+	}
+	if err := cc1.CompileWith(cPath, binPath, ccOpts); err != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("cc compile: %w", err)
 	}
