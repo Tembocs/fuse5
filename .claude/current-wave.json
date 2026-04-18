@@ -1,6 +1,6 @@
 {
-  "current_wave": "W19",
-  "current_phase": "PCL",
+  "current_wave": "W20",
+  "current_phase": "P00",
   "updated": "2026-04-18",
-  "notes": "Language Server wave in closure phase. LSP 3.17 stub retired: compiler/lsp/ implements the full LSP surface — types.go (protocol shapes), transport.go (Content-Length framing), docstore.go (didOpen/didChange/didClose model), server.go (dispatch loop + initialize/shutdown/exit), diagnostics.go (parse-on-edit publish pipeline), handlers.go (hover/goto/completion/documentSymbol/workspaceSymbol/codeAction), semantic_tokens.go (packed-stream encoder). Ten tests cover every wave-doc Verify command: TestLspTransport, TestLspInitialize, TestLspDocSync, TestLspDiagnosticsStream, TestLspQuickFixes, TestLspHover, TestLspGotoDefinition, TestLspDocumentSymbols, TestLspCompletion, TestLspSemanticTokens. The scripted-session e2e (TestLspScriptedSession) launches `fuse lsp` as a subprocess, plays initialize → didOpen → hover → goto → completion → documentSymbol → shutdown → exit, and asserts each response. cmd/fuse gains a `lsp` subcommand running lsp.New over stdin/stdout. STUBS.md W19 history block appended; WC019 logged using Rule 10.2 mandated 6-field template. Thirteenth full wave under Rule 9.5 three-commit discipline: P00 audit (1b59c7a), implementation (06ebcac), PCL (this commit). Next: enter W20 Stdlib core."
+  "notes": "Stdlib Core wave entered. Rule 9.5 P00 commit. `go run tools/checkstubs/main.go -wave W20 -phase P00` and `go run tools/checkstubs/main.go -wave W20` both exit 0. Implementation lands next: stdlib/core/ Fuse source tree (traits / primitives / string / collections / cell / ptr / overflow / rt_bridge / marker), fuse build library-mode pattern, fuse doc --check directory support, and Go tests for TestCoreStdlib / TestCoreReExports / TestCell / TestRefCell / TestPtrNull / TestSizeOfWrappers / TestOverflowMethods."
 }
