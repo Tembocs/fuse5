@@ -366,6 +366,24 @@ stable surface, not to become a shadow standard library.
 
 `stdlib/` contains the Fuse standard library and is divided into three tiers.
 
+During bootstrap, the expected stdlib inventory is broader and more concrete
+than the current minimal directory summary suggests. At minimum, the baseline
+stdlib expected for a complete Stage 1 compiler includes:
+
+- core and data foundations: `bool`, `comparable`, `debuggable`, `equatable`,
+  `float`, `float32`, `fmt`, `hash`, `hashable`, `int`, `int32`, `int8`,
+  `list`, `map`, `math`, `option`, `printable`, `result`, `set`, `string`,
+  `traits`, `uint32`, `uint64`, `uint8`
+- hosted runtime and systems modules: `chan`, `env`, `http`, `io`, `json`,
+  `net`, `os`, `path`, `process`, `random`, `shared`, `simd`, `sys`, `time`,
+  `timer`
+- utility and protocol libraries: `argparse`, `crypto`, `http_server`,
+  `json_schema`, `jsonrpc`, `log`, `regex`, `test`, `toml`, `uri`, `yaml`
+
+The tier split below describes where such modules belong architecturally; it
+must not be used to shrink the baseline by silently pushing expected Stage 1
+libraries into an undefined future.
+
 ### `stdlib/core/`
 
 The OS-free core tier. It must not depend on hosted functionality.
@@ -383,7 +401,8 @@ Expected content includes:
 
 ### `stdlib/full/`
 
-The hosted standard library tier. It may depend on `core/` and exposes:
+The hosted standard library tier. It may depend on `core/` and exposes the
+baseline non-optional stdlib surface promised for a complete Stage 1 compiler:
 
 - IO
 - filesystem
@@ -392,11 +411,15 @@ The hosted standard library tier. It may depend on `core/` and exposes:
 - threading
 - synchronization
 - channels
+- structured data / serialization (for example JSON and YAML when promised)
+- application/network services (for example HTTP client/server when promised)
 
 ### `stdlib/ext/`
 
 Optional extended libraries. This tier may depend on `core/` or `full/` but not
-the reverse.
+the reverse. Libraries that Fuse treats as part of the baseline usable
+standard library must not be hidden here merely because they were forgotten in
+Stage 1 planning.
 
 The dependency rule is strict:
 

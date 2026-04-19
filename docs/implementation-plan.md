@@ -55,6 +55,27 @@ native backend.
 13. Every user-facing compiler diagnostic carries a primary span, a
     one-line explanation, and a suggestion where one is possible
     (Rule 6.17). Diagnostic quality is a correctness concern, not polish.
+14. Stage 1 completeness includes a practical stdlib floor. A Stage 1
+  compiler is not complete if it only has core types and thin hosted
+  wrappers. The baseline standard library must explicitly schedule the
+  everyday facilities Fuse intends to claim as stdlib, including
+  structured-data and application/networking surfaces such as JSON,
+  YAML, and HTTP client/server if they are part of the promise. Those
+  features must land before self-hosting rather than being implicitly
+  deferred to `stdlib/ext`.
+
+The current expected bootstrap stdlib inventory is broader than the existing
+W20/W22 shorthand. At minimum, the plan is expected to account for:
+
+- core and data foundations: `bool`, `comparable`, `debuggable`, `equatable`,
+  `float`, `float32`, `fmt`, `hash`, `hashable`, `int`, `int32`, `int8`,
+  `list`, `map`, `math`, `option`, `printable`, `result`, `set`, `string`,
+  `traits`, `uint32`, `uint64`, `uint8`
+- hosted runtime and systems modules: `chan`, `env`, `http`, `io`, `json`,
+  `net`, `os`, `path`, `process`, `random`, `shared`, `simd`, `sys`, `time`,
+  `timer`
+- utility and protocol libraries: `argparse`, `crypto`, `http_server`,
+  `json_schema`, `jsonrpc`, `log`, `regex`, `test`, `toml`, `uri`, `yaml`
 
 ## Naming conventions
 
@@ -154,12 +175,17 @@ Every wave contains:
 | [26](implementation/wave26_native_backend_transition.md) | Native Backend Transition | W25 done | stage2 compiles without C11 backend dependency; native DWARF |
 | [27](implementation/wave27_performance_gate.md) | Performance Gate | W26 done | runtime ratios, compile-time budgets, code-size, memory footprint gated in CI |
 | [28](implementation/wave28_retirement_of_go_and_c.md) | Retirement of Go and C | W27 done | Fuse owns the compiler implementation path |
-| [29](implementation/wave29_targets_and_native_expansion.md) | Targets and Native Expansion | W28 done | cross-target matrix and `stdlib/ext/` on native base |
+| [29](implementation/wave29_targets_and_native_expansion.md) | Targets and Native Expansion | W28 done | cross-target matrix and optional `stdlib/ext/` on native base |
 | [30](implementation/wave30_ecosystem_documentation.md) | Ecosystem Documentation | W29 done | tutorial, book, migration guides, ecosystem guide, published docs site |
 
 Every feature documented in `docs/fuse-language-reference.md` is scheduled
 to one or more of the waves above. No feature is deferred to a later
 version.
+
+Baseline stdlib facilities expected from a usable Stage 1 compiler must also
+be scheduled before self-hosting. If Fuse treats JSON, YAML, HTTP client,
+HTTP server, or similar libraries as part of the standard offering, they do
+not belong in unscheduled limbo or in `stdlib/ext` by default.
 
 
 ## Per-wave plans

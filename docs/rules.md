@@ -94,6 +94,27 @@ feature in the language reference is scheduled to a concrete wave in
 `docs/implementation-plan.md`. If a feature does not fit any scheduled wave,
 the plan must be revised to add a wave, not the feature deferred.
 
+### Rule 2.6 — A feature retires in one wave.
+
+A user-visible feature may have prerequisite substrate in earlier waves, but it
+has exactly one retirement wave: the wave whose exit criteria declare it done,
+whose `STUBS.md` row is removed, and whose proof program demonstrates the full
+behavior. Parsing in one wave, typing in another, lowering in a third, and the
+real behavior in a later wave is forbidden when those steps together are the
+feature the user experiences. Earlier waves may land infrastructure only if the
+feature remains tagged `STUB` in the language reference and remains active in
+`STUBS.md`.
+
+If a feature is too large to fit honestly in one wave, the plan must either
+enlarge the wave or split the feature into smaller user-visible features with
+separate language-reference sections, separate `STUBS.md` rows, and separate
+proof programs. By the time the Go-based Stage 1 compiler is declared
+feature-complete, every language and stdlib feature must already exist end to
+end. Later waves may change the implementation path (self-hosting, native
+backend, performance, targets, documentation), but they are not valid
+retirement waves for unfinished language or stdlib semantics. (See learning-log
+L015, L018, L021, L022.)
+
 ## 3. Compiler architecture invariants
 
 ### Rule 3.1 — There are exactly three IRs.
