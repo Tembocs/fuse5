@@ -1,6 +1,6 @@
 # Fuse Implementation Plan
 
-> Status: normative for Fuse.
+> Status: canonical implementation plan for the Attempt 6 meta tree.
 >
 > This document is the build plan from an empty repository to a self-hosting
 > Fuse compiler and the later retirement of bootstrap-only implementation
@@ -23,6 +23,26 @@ The C11 backend is therefore bootstrap infrastructure, not the terminal
 backend. Design decisions in HIR, MIR, type identity, ownership analysis, and
 pass structure must not depend on C11 in a way that would block the later
 native backend.
+
+## Language philosophy and three pillars
+
+Fuse is not planned as a generic "systems language" project. The plan is bound
+to the language philosophy stated in the project overview:
+
+- memory safety without a garbage collector
+- concurrency safety without a Rust-style borrow-checker learning cliff
+- developer experience as a first-class constraint
+
+The wave schedule must preserve all three at the same time. A wave may focus on
+one pillar more strongly than the others, but it may not create hidden debt by
+weakening the other two. In practice this means:
+
+- ownership, destruction, and allocator work must remain explicit and
+  verifiable
+- concurrency surfaces must preserve `Send`/`Sync`, ranking, and observable
+  runtime behavior rather than deferring them into "later cleanup"
+- diagnostics, docs, CLI shape, package tooling, and the stdlib surface are not
+  polish work; they are part of the language promise
 
 ## Working principles
 
@@ -65,6 +85,16 @@ native backend.
   YAML, and HTTP client/server if they are part of the promise. Those
   features must land before self-hosting rather than being implicitly
   deferred to `stdlib/ext`.
+15. Every wave must state which of the three pillars it advances and what
+    concrete deliverables prove that alignment.
+16. Every public stdlib module named in the language reference belongs to
+    exactly one pre-self-hosting wave and at least one named phase inside
+    that wave.
+17. Phase names must expose the public surface or semantic contract being
+    delivered. Umbrella phases that hide unscheduled modules are invalid.
+18. The implementation tree and the language-reference tree move together.
+    When the reference adds or splits a user-visible feature, the owning
+    wave and phase are updated in the same planning change.
 
 The current expected bootstrap stdlib inventory is broader than the existing
 W20/W22 shorthand. At minimum, the plan is expected to account for:
@@ -78,6 +108,20 @@ W20/W22 shorthand. At minimum, the plan is expected to account for:
   `timer`
 - utility and protocol libraries: `argparse`, `crypto`, `http_server`,
   `json_schema`, `jsonrpc`, `log`, `regex`, `test`, `toml`, `uri`, `yaml`
+
+## Baseline stdlib wave ownership
+
+The Attempt 6 meta language reference names the baseline standard library
+explicitly. The implementation plan therefore assigns wave ownership explicitly
+rather than leaving modules implied by broad labels.
+
+| Wave | Scope | Owned public surface | Delivery contract |
+|---|---|---|---|
+| W20 | core foundations | `core.bool`, `core.comparable`, `core.debuggable`, `core.equatable`, `core.float`, `core.float32`, `core.fmt`, `core.hash`, `core.hashable`, `core.int`, `core.int32`, `core.int8`, `core.list`, `core.map`, `core.math`, `core.option`, `core.printable`, `core.result`, `core.set`, `core.string`, `core.traits`, `core.uint32`, `core.uint64`, `core.uint8` | stable public module tree, docs, regressions, and proof coverage |
+| W21 | allocatorization of core | allocator trait, system/global allocator policy, allocator-parameterized heap-owning core containers | every core heap path routes through the explicit allocator contract |
+| W22 | hosted and application baseline | `full.io`, `full.fs`, `full.os`, `full.env`, `full.path`, `full.process`, `full.sys`, `full.random`, `full.simd`, `full.time`, `full.timer`, `full.thread`, `full.sync`, `full.shared`, `full.chan`, `full.net`, `full.http`, `full.http_server`, `full.json`, `full.yaml`, `full.toml`, `full.json_schema`, `full.uri`, `full.regex`, `full.crypto`, `full.jsonrpc`, `full.argparse`, `full.log`, `full.test` | stable public module tree, application-facing proofs, and no deferred baseline modules |
+| W23 | package acquisition | manifest, lockfile, resolver, fetcher, registry protocol | Stage 1 baseline libraries can be consumed and versioned as packages |
+| W30 | ecosystem documentation | tutorials, book, migration guides, published docs site | the shipped language and stdlib surface is discoverable without reading implementation code |
 
 ## Naming conventions
 
@@ -99,6 +143,8 @@ Every task in this plan must be written with:
 - a short goal
 - a `Currently:` line naming what exists at the start of the task (file:line
   if the code exists, or "not yet started" if the package is empty)
+- an `Expected deliveries:` line naming the public behavior, modules, files,
+  or proofs the task must leave behind
 - an exact definition of done
 - a `Verify:` line giving the specific command that proves the DoD is met;
   this command must fail if the task has not been completed and must be run
@@ -109,6 +155,7 @@ Every task in this plan must be written with:
 ```
 Task 01: ... [Wxx-Pyy-Tzz-...]
 Currently: ...
+Expected deliveries: ...
 DoD: verifiable completion rule.
 Verify: go test ./compiler/pkg/... -run TestName -v
 ```
@@ -129,6 +176,8 @@ instead.
 Every wave contains:
 
 - **Goal**: one paragraph summary
+- **Pillar alignment**: which of the three pillars the wave advances and what
+  it must not regress
 - **Entry criterion**: what must be true before this wave begins
 - **State on entry**: what the codebase actually looks like when the wave
   begins (which packages are empty, which are stubs, which are partial)
@@ -168,19 +217,19 @@ Every wave contains:
 | [17](implementation/wave17_codegen_c11_hardening.md) | Codegen C11 Hardening | W16 done | backend contracts enforced; debug info via C; perf baseline seeded |
 | [18](implementation/wave18_cli_and_diagnostics.md) | CLI and Diagnostics | W17 done | `fuse build/run/check/test/fmt/doc/repl` + diagnostic-quality audit + incremental driver |
 | [19](implementation/wave19_language_server.md) | Language Server | W18 done | LSP 3.17 server: diagnostics, hover, goto-def, completion, symbols |
-| [20](implementation/wave20_stdlib_core.md) | Stdlib Core | W19 done | core traits, primitives, strings, collections, Cell/RefCell, Ptr.null, overflow methods |
-| [21](implementation/wave21_custom_allocators.md) | Custom Allocators | W20 done | Allocator trait; collections accept allocator; proof program with bump allocator |
-| [22](implementation/wave22_stdlib_hosted.md) | Stdlib Hosted | W21 done | IO, fs, os, time, thread, sync, channels, network ship |
-| [23](implementation/wave23_package_management.md) | Package Management | W22 done | manifest, lockfile, resolver, fetcher, registry protocol, two-crate proof |
+| [20](implementation/wave20_stdlib_core.md) | Stdlib Core | W19 done | core module tree ships: traits, numerics, option/result, string/fmt, collections, interior mutability, ptr/memory, overflow, docs/proofs |
+| [21](implementation/wave21_custom_allocators.md) | Custom Allocators | W20 done | allocator trait, system/global allocator, allocator-parameterized core containers, bump proof |
+| [22](implementation/wave22_stdlib_hosted.md) | Stdlib Hosted | W21 done | hosted/application baseline ships: io/fs/os/env/path/process/sys/random/simd/time/timer/thread/sync/shared/chan/net/http/http_server/json/yaml/toml/json_schema/uri/regex/crypto/jsonrpc/argparse/log/test |
+| [23](implementation/wave23_package_management.md) | Package Management | W22 done | manifest, lockfile, resolver, fetcher, registry protocol, baseline stdlib acquisition proof |
 | [24](implementation/wave24_stub_clearance_gate.md) | Stub Clearance Gate | W23 done | no overdue stubs, no silent stubs, and no unscheduled residue reaches Stage 2 |
 | [25](implementation/wave25_stage2_and_self_hosting.md) | Stage 2 and Self-Hosting | W24 done | stage1 compiles stage2; stage2 compiles itself reproducibly |
 | [26](implementation/wave26_native_backend_transition.md) | Native Backend Transition | W25 done | stage2 compiles without C11 backend dependency; native DWARF |
 | [27](implementation/wave27_performance_gate.md) | Performance Gate | W26 done | runtime ratios, compile-time budgets, code-size, memory footprint gated in CI |
 | [28](implementation/wave28_retirement_of_go_and_c.md) | Retirement of Go and C | W27 done | Fuse owns the compiler implementation path |
-| [29](implementation/wave29_targets_and_native_expansion.md) | Targets and Native Expansion | W28 done | cross-target matrix and optional `stdlib/ext/` on native base |
-| [30](implementation/wave30_ecosystem_documentation.md) | Ecosystem Documentation | W29 done | tutorial, book, migration guides, ecosystem guide, published docs site |
+| [29](implementation/wave29_targets_and_native_expansion.md) | Targets and Native Expansion | W28 done | cross-target matrix and optional post-baseline `stdlib/ext/` on native base |
+| [30](implementation/wave30_ecosystem_documentation.md) | Ecosystem Documentation | W29 done | tutorial, book, migration guides, ecosystem guide, published docs site for the canonical reference and implementation trees |
 
-Every feature documented in `docs/fuse-language-reference.md` is scheduled
+Every feature documented in [language-reference/fuse-language-reference.md](language-reference/fuse-language-reference.md) is scheduled
 to one or more of the waves above. No feature is deferred to a later
 version.
 
@@ -192,7 +241,16 @@ not belong in unscheduled limbo or in `stdlib/ext` by default.
 
 ## Per-wave plans
 
-Full detail for each wave — goal, entry criterion, state on entry, exit criteria, proof of completion, implementation phases, and wave closure phase — lives in [`docs/implementation/`](implementation/). One file per wave.
+Full detail for each wave — goal, entry criterion, state on entry, exit criteria, proof of completion, implementation phases, and wave closure phase — lives in [implementation/](implementation/). One file per wave.
+
+Supporting planning documents for the meta tree:
+
+- [implementation/README.md](implementation/README.md) — implementation-tree index and stdlib ownership summary
+- [implementation/phase-model.md](implementation/phase-model.md) — required phase, task, verification, and closure model
+
+Wave documents are expected to stay aligned with the staged language reference,
+especially the `language-reference/core/` and `language-reference/full/`
+module guides.
 
 - [Wave 00: Governance and Phase Model](implementation/wave00_governance.md)
 - [Wave 01: Lexer](implementation/wave01_lexer.md)

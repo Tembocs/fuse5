@@ -6,11 +6,12 @@
 Goal: bring up the self-hosted Fuse compiler and prove it compiles itself
 reproducibly.
 
-Entry criterion: W24 done. Phase 00 re-verifies the Active stubs table
-is empty.
+Entry criterion: W24 done. Phase 00 re-verifies that no overdue stubs
+block self-hosting entry.
 
-State on entry: `stage2/src/` is empty. All compiler infrastructure
-complete. STUBS.md Active table is empty.
+State on entry: `stage2/src/` is empty. All compiler infrastructure is
+complete. STUBS.md may still contain W25+ tracker rows, but self-hosting
+does not begin with overdue residue.
 
 Exit criteria:
 
@@ -30,9 +31,10 @@ go test ./tests/bootstrap/... -v
 ## Phase 00: Stub Audit [W25-P00-STUB-AUDIT]
 
 - Task 01: Self-hosting audit [W25-P00-T01-ZERO-STUBS]
-  DoD: Active stubs table empty. If not empty, the wave cannot begin and
-  the missing retirements go back to W24.
-  Verify: `go run tools/checkstubs/main.go -wave W25 -phase P00 -require-empty-active`
+  DoD: no Active row retires before W25. If an overdue row exists, the
+  wave cannot begin and the missing retirement or reschedule is fixed
+  before self-hosting work starts.
+  Verify: `go run tools/checkstubs/main.go -wave W25 -phase P00`
 
 ## Phase 01: Port Stage 2 [W25-P01-PORT]
 

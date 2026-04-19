@@ -1,11 +1,11 @@
 # Fuse Phase Model
 
-> Status: normative for Fuse.
+> Status: normative for the Attempt 6 meta implementation tree.
 >
 > This document describes the phase model used throughout the
-> implementation plan. It is a reference for contributors and agents; the
-> canonical rule set is in [docs/rules.md](rules.md) §6.12–§6.16 and
-> [docs/implementation-plan.md](implementation-plan.md).
+> implementation plan. It is a reference for contributors and agents working
+> in the staged `docs/meta/` tree. The canonical rule set lives in the Fuse
+> rules document and in [../implementation-plan.md](../implementation-plan.md).
 
 ## Identifiers
 
@@ -26,6 +26,24 @@ All numeric components are zero-padded.
 ## Phase model per wave
 
 Every wave has the same three-part phase shape.
+
+## Wave prologue requirements
+
+Every wave document must open with enough structure that a contributor can tell
+what the wave is responsible for without reading source code or guessing.
+
+Each wave prologue must therefore name:
+
+- the wave goal in user-visible terms
+- the entry criterion and state on entry
+- the exit criteria as concrete deliverables, not umbrella labels
+- the proof of completion commands
+- the pillar alignment for the wave: memory safety, concurrency safety,
+  developer experience
+
+If a wave owns standard-library modules, the prologue must name those public
+modules explicitly. It is not acceptable to say "misc hosted libraries" or
+"remaining utilities" when the language reference already names the modules.
 
 ### Phase 00 — Stub Audit (mandatory, first phase)
 
@@ -50,6 +68,8 @@ narrowly enough to be reviewable. Each task within a phase carries:
 
 - a short goal
 - a `Currently:` line describing the starting state
+- an `Expected deliveries:` line or equivalent wording that names the public
+  behavior, modules, files, or proofs that phase must leave behind
 - a DoD (definition of done) clause
 - a `Verify:` command that proves the DoD is met
 - required regression coverage
@@ -57,6 +77,10 @@ narrowly enough to be reviewable. Each task within a phase carries:
 A task is not done until its `Verify:` command runs to completion and
 emits the declared passing output (Rule 4.6). "It looks correct" is not
 equivalent to "Verify passes."
+
+Phase names must expose the semantic or public-surface family being delivered.
+Names such as "misc", "remaining work", or "cleanup" are not valid for a
+normative implementation phase.
 
 ### Phase PCL — Wave Closure (mandatory, last phase)
 
@@ -98,7 +122,7 @@ The burden of proof that a task or wave is done is cumulative:
 | Level | Evidence |
 |---|---|
 | Task | `Verify:` command output recorded (PR body, commit message, or task log) |
-| User-visible feature | Proof program committed under [`tests/e2e/`](../tests/e2e/) and green in CI on that SHA |
+| User-visible feature | Proof program committed under `tests/e2e/` and green in CI on that SHA |
 | Wave | All tasks green + `STUBS.md` updated + `WCxxx` learning-log entry appended + CI green on full suite |
 | Project | No overdue or silent stubs before self-hosting; perf gate passes before retiring Go/C |
 
