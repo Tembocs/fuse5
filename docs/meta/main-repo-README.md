@@ -45,6 +45,20 @@ The current compiler architecture uses a bootstrap path in which a Go compiler
 lowers Fuse through C11 before producing native binaries. The long-term goal is
 a self-hosted Fuse compiler that no longer depends on that bootstrap backend.
 
+## Project Discipline
+
+Earlier Fuse work failed less because the language direction was weak and more
+because planning, proof, and implementation drifted apart. This repository is
+structured to keep the language reference, the rules, the implementation plan,
+the learning log, `STUBS.md`, and the end-to-end proof corpus aligned so that
+the same failure mode does not recur quietly.
+
+That discipline also applies to Stage 1 scope. A Stage 1 compiler is not
+considered complete if it only ships core types plus thin systems-facing
+wrappers. If Fuse claims a practical baseline standard library, the project is
+expected to specify, schedule, implement, and prove that baseline before Stage
+1 is called complete.
+
 ## Project Documents
 
 The core documents live under `docs/` and govern both the language and the
