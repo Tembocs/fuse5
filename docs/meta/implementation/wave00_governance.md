@@ -10,7 +10,7 @@ language feature.
 
 Entry criterion: none.
 
-State on entry: only the five foundational docs and the `STUBS.md` seed
+State on entry: only the foundational docs and the `STUBS.md` seed
 exist. No Go module. No CI. No compiler packages.
 
 Exit criteria:
@@ -18,7 +18,7 @@ Exit criteria:
 - `make all` succeeds from a clean checkout
 - `go test ./...` succeeds on the initial package set
 - CI runs on every push and PR for Linux, macOS, and Windows
-- the five foundational docs exist and are readable
+- the foundational docs exist and are readable
 - `STUBS.md` exists with a seeded Active stubs table covering every
   user-visible language feature not yet implemented, and an empty Stub
   history section
@@ -74,7 +74,7 @@ go run tools/checkstubs/main.go
   [W00-P04-T01-CURRENT-WAVE-FILE]
   Verify: `go run tools/checkgov/main.go -current-wave`
 - Task 02: Document phase model [W00-P04-T02-PHASE-MODEL-DOC]
-  Verify: `test -f docs/phase-model.md && go run tools/checkdocs/main.go`
+  Verify: `test -f docs/implementation/phase-model.md && go run tools/checkdocs/main.go`
 - Task 03: Install `tools/checkstubs` [W00-P04-T03-CHECKSTUBS-TOOL]
   Verify: `go test ./tools/checkstubs/... -v`
 

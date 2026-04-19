@@ -1,6 +1,6 @@
 # Fuse Language Reference
 
-> Status: canonical monolithic reference for the Attempt 6 meta tree.
+> Status: canonical monolithic reference for the staged Fuse docs tree.
 >
 > This document is the specification of the Fuse language. It is written for
 > two audiences at once:

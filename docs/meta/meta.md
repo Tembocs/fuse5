@@ -1,14 +1,14 @@
 # Fuse Meta
 
-> This repository is attempt number 6 at building the Fuse programming
-> language compiler. The purpose of this document is to state, plainly, what
-> this attempt is trying to correct from the previous five.
+> This directory stages the future documentation root for Fuse.
+> Its purpose is to state, plainly, what this documentation set is trying to
+> correct from earlier Fuse work.
 
-The first five attempts did not fail because the language direction was empty.
-They failed because planning, proof, and implementation drifted apart. This
-attempt uses the accumulated lessons in the learning log to tighten the
-reference, the rules, the planning model, and the test infrastructure so that
-the same classes of failure do not quietly recur.
+Earlier Fuse work did not fail because the language direction was empty. It
+failed because planning, proof, and implementation drifted apart. This staged
+documentation set uses the accumulated lessons in the learning log to tighten
+the reference, the rules, the planning model, and the test infrastructure so
+that the same classes of failure do not quietly recur.
 
 Another repeated failure is stdlib scope drift. "Complete Stage 1" was treated
 as if a compiler plus a thin systems-facing library layer were enough. That is
@@ -41,7 +41,7 @@ sections that hide multiple independent language or stdlib features should be
 split into smaller atomic features where needed.
 
 2. Strengthen the rules with guardrails derived from the learning log.
-The rules should encode the hard lessons from prior attempts directly: no
+The rules should encode the hard lessons from earlier Fuse work directly: no
 silent stubs, no unverifiable completions, no feature retirement without proof,
 no overdue stub drift, and no user-visible feature spanning waves as a
 half-implemented pipeline.
@@ -78,7 +78,7 @@ wishlist material.
 
 ## Practical consequence
 
-This attempt is not just "build the compiler again". It is:
+This repository is not just "build the compiler again". It is:
 
 - rebuild the specification so features are schedulable
 - rebuild the rules so failure modes are blocked earlier
@@ -86,17 +86,20 @@ This attempt is not just "build the compiler again". It is:
 - rebuild the stdlib promise so Stage 1 means usable
 - rebuild the tests so the spec is executable
 
-If those five stay aligned, attempt 6 has a chance to stop repeating the same
-architectural failures that invalidated attempts 1 through 5.
+If those five stay aligned, Fuse has a chance to stop repeating the same
+architectural failures that invalidated earlier Fuse work.
 
 ## Draft docs tree
 
-`docs/meta/` now stages the future documentation root for Attempt 6. When this
-tree is copied into the new repository and renamed to `docs/`, the intended
-top-level split is:
+`docs/meta/` now stages the future documentation root for Fuse. When this tree
+is copied into a new repository and renamed to `docs/`, the intended top-level
+split is:
 
 - `language-reference/` — the canonical normative reference tree
 - `implementation/` — the canonical delivery-plan tree
+- `rules.md` — contributor and agent discipline rules
+- `learning-log.md` — append-only lessons and wave-closure log
+- `README.md` — root repository entry point
 
-`meta.md` remains the attempt-level direction note that explains why this
+`meta.md` remains the repository-level direction note that explains why this
 restructure exists.

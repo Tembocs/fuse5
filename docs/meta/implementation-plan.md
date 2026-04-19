@@ -1,6 +1,6 @@
 # Fuse Implementation Plan
 
-> Status: canonical implementation plan for the Attempt 6 meta tree.
+> Status: canonical implementation plan for the staged Fuse docs tree.
 >
 > This document is the build plan from an empty repository to a self-hosting
 > Fuse compiler and the later retirement of bootstrap-only implementation
@@ -111,7 +111,7 @@ W20/W22 shorthand. At minimum, the plan is expected to account for:
 
 ## Baseline stdlib wave ownership
 
-The Attempt 6 meta language reference names the baseline standard library
+The staged Fuse language reference names the baseline standard library
 explicitly. The implementation plan therefore assigns wave ownership explicitly
 rather than leaving modules implied by broad labels.
 

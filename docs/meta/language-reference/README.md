@@ -1,7 +1,7 @@
 # Language Reference Tree
 
 This directory is the staging form of the future `docs/language-reference/`
-tree for Attempt 6.
+tree for Fuse.
 
 It exists so that `docs/meta/` can later be copied into a new repository and
 renamed to `docs/` without changing the intended documentation layout.
@@ -10,7 +10,7 @@ renamed to `docs/` without changing the intended documentation layout.
 
 - [fuse-language-reference.md](fuse-language-reference.md) — the canonical
   monolithic reference entry point for the staging tree. It incorporates the
-  Attempt 6 stdlib baseline directly and links to the detailed `core/` and
+  staged stdlib baseline directly and links to the detailed `core/` and
   `full/` module guides.
 
 ## Core guides

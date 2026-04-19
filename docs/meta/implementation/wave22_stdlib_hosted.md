@@ -7,7 +7,7 @@
 
 Goal: implement the hosted and application-facing `full.*` baseline on top of
 W20 core and W21 allocator contracts while preserving the core/hosted boundary.
-W22 owns every Stage 1 hosted module named in the Attempt 6 language-reference
+W22 owns every Stage 1 hosted module named in the staged language-reference
 tree. No module named here may be left in an anonymous umbrella, silently
 deferred to `stdlib/ext`, or kicked to a later rescue wave.
 

@@ -8,7 +8,7 @@ self-hosting begins with no overdue stubs and no silent stubs. W24 does
 not require the Active stubs table to be literally empty while later
 waves still own explicit tracker rows.
 
-This wave exists specifically because every past attempt at Fuse has
+This wave exists specifically because earlier Fuse work has
 reached self-hosting with silent stubs still in place, and those stubs
 later surfaced as missing features (L013, L015). The clearance wave is
 the forcing function that guarantees they cannot slip through, while

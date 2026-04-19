@@ -4,7 +4,7 @@
 >
 > This document is the canonical rule set for contributors and AI agents. It is
 > intentionally dense. Every rule exists because violating it either damaged the
-> architecture or made debugging materially harder in a previous attempt.
+> architecture or made debugging materially harder in earlier Fuse work.
 
 ## Table of contents
 
@@ -27,9 +27,9 @@
 
 Before writing code in this repository, a contributor or AI agent MUST:
 
-1. Read `docs/fuse-language-reference.md`.
-2. Read `docs/implementation-plan.md` and locate the current wave and phase.
-3. Read `docs/repository-layout.md`.
+1. Read `README.md`.
+2. Read `docs/language-reference/fuse-language-reference.md`.
+3. Read `docs/implementation-plan.md` and locate the current wave and phase.
 4. Read `docs/learning-log.md`, especially recent entries.
 5. Read `STUBS.md` and identify every active stub in scope for the current wave.
 6. Check the working tree state.
@@ -44,10 +44,10 @@ Before committing, a contributor or AI agent MUST:
 5. Verify that the diff contains only intended changes.
 6. Ensure any non-trivial bug fix has both a regression and a learning-log entry.
 7. Ensure every issue, bug, or obstacle encountered during the work is either
-  fixed at the root cause or explicitly rescheduled before the task is
-  closed.
+   fixed at the root cause or explicitly rescheduled before the task is
+   closed.
 8. Append the corresponding `docs/learning-log.md` entry after the fix or
-  explicit reschedule lands.
+   explicit reschedule lands.
 9. Update `STUBS.md` if any stubs were retired or introduced.
 
 Before marking a wave complete, a contributor or AI agent MUST:
@@ -55,7 +55,7 @@ Before marking a wave complete, a contributor or AI agent MUST:
 1. Confirm that all proof programs for the wave exist in `tests/e2e/` and pass
    in CI.
 2. Confirm that `STUBS.md` reflects all retirements and additions from the wave.
-3. Append a wave closure entry (WCxxx) to the learning log.
+3. Append a wave closure entry (`WCxxx`) to the learning log.
 4. Confirm CI is green on the full test suite, not just the wave's local tests.
 
 ## 2. Language reference precedence
@@ -63,7 +63,7 @@ Before marking a wave complete, a contributor or AI agent MUST:
 ### Rule 2.1 — The reference precedes implementation.
 
 No language feature may be implemented before it appears in
-`docs/fuse-language-reference.md`.
+`docs/language-reference/fuse-language-reference.md`.
 
 ### Rule 2.2 — The reference is normative.
 
@@ -91,8 +91,8 @@ Every feature section in the language reference carries an explicit status tag:
   must emit the named diagnostic when this feature is used.
 
 A section without a status tag is a documentation defect. A section tagged
-DONE must have a corresponding e2e proof program. A section tagged STUB must
-have a corresponding entry in `STUBS.md`.
+`DONE` must have a corresponding e2e proof program. A section tagged `STUB`
+must have a corresponding entry in `STUBS.md`.
 
 There is no `SPECIFIED — Wave TBD` or `SPECIFIED — Post-V1` status. Every
 feature in the language reference is scheduled to a concrete wave in
@@ -139,13 +139,13 @@ required metadata fields.
 
 ### Rule 3.4 — Every pass declares reads and writes.
 
-Passes are registered in a manifest that declares which metadata they consume and
-which metadata they produce.
+Passes are registered in a manifest that declares which metadata they consume
+and which metadata they produce.
 
 ### Rule 3.5 — Invariant walkers run at pass boundaries.
 
-Invariant walkers must run in debug and CI contexts. A failing invariant is a bug
-in the producing pass, not a reason to disable the walker.
+Invariant walkers must run in debug and CI contexts. A failing invariant is a
+bug in the producing pass, not a reason to disable the walker.
 
 ### Rule 3.6 — Deterministic collections only in IR.
 
@@ -159,8 +159,8 @@ are forbidden.
 
 ### Rule 3.8 — Liveness is computed once.
 
-Liveness is computed once per function and then consumed by later passes. It must
-not be recomputed opportunistically downstream.
+Liveness is computed once per function and then consumed by later passes. It
+must not be recomputed opportunistically downstream.
 
 ### Rule 3.9 — Unresolved types must not cross into codegen.
 
@@ -176,7 +176,8 @@ and structural divergence are design constraints, not codegen conveniences.
 
 ### Rule 4.1 — Fix root causes.
 
-A bug fix must remove the structural cause, not merely quiet the visible symptom.
+A bug fix must remove the structural cause, not merely quiet the visible
+symptom.
 
 ### Rule 4.2 — No workarounds.
 
@@ -184,8 +185,8 @@ Code that exists only because some other code is wrong is forbidden.
 
 ### Rule 4.3 — Every meaningful bug gets a regression.
 
-If the bug took real diagnosis effort or revealed a real invariant, the fix must
-land with a regression test.
+If the bug took real diagnosis effort or revealed a real invariant, the fix
+must land with a regression test.
 
 ### Rule 4.4 — Every meaningful bug gets a learning-log entry.
 
@@ -193,15 +194,15 @@ If the bug taught the team something about the design, it belongs in the log.
 
 ### Rule 4.5 — Bootstrap tests use the real Stage 2 source.
 
-Self-hosting verification must compile the real `stage2/` compiler, not only toy
-inputs.
+Self-hosting verification must compile the real `stage2/` compiler, not only
+toy inputs.
 
 ### Rule 4.6 — Every task DoD must include a verification command.
 
-A DoD written in prose alone is incomplete. Each task in the implementation plan
-must carry a `Verify:` line naming the exact command that proves the DoD is met
-when run on a clean working tree. If no such command can be written, the task is
-not ready to be executed. Prose-only DoDs are a planning defect, not an
+A DoD written in prose alone is incomplete. Each task in the implementation
+plan must carry a `Verify:` line naming the exact command that proves the DoD
+is met when run on a clean working tree. If no such command can be written, the
+task is not ready to be executed. Prose-only DoDs are a planning defect, not an
 acceptable shorthand.
 
 ### Rule 4.7 — Issues are fixed, then logged.
@@ -236,8 +237,8 @@ Dependency direction is one-way.
 
 ### Rule 5.5 — No hidden special cases in public stdlib APIs.
 
-If a behavior belongs to a trait or language rule, it must not be quietly hardcoded
-in stdlib public API behavior.
+If a behavior belongs to a trait or language rule, it must not be quietly
+hardcoded in stdlib public API behavior.
 
 ### Rule 5.6 — Public stdlib API requires documentation.
 
@@ -263,13 +264,13 @@ Property tests require stable seeds and reproducible failures.
 
 ### Rule 6.5 — Integration tests should hit the real backend when possible.
 
-A test that claims the compiler emits working binaries should invoke the backend
-toolchain and execute the result.
+A test that claims the compiler emits working binaries should invoke the
+backend toolchain and execute the result.
 
 ### Rule 6.6 — Stdlib is part of validation, not a separate concern.
 
-Wave exit criteria must include stdlib validation once the relevant surface is in
-scope.
+Wave exit criteria must include stdlib validation once the relevant surface is
+in scope.
 
 ### Rule 6.7 — Bootstrap health is release-blocking.
 
@@ -279,16 +280,16 @@ Any regression in self-hosting or reproducibility is a release blocker.
 
 A feature is complete only when a Fuse program that uses it compiles, links,
 runs, and produces the correct output. Unit tests prove a component works in
-isolation. End-to-end proof programs prove the compiler works for the user. Both
-are required. (See learning-log L013, L014.)
+isolation. End-to-end proof programs prove the compiler works for the user.
+Both are required. (See learning-log L013, L014.)
 
 ### Rule 6.9 — Stubs must emit diagnostics, not silent defaults.
 
 If a feature is parsed and type-checked but not lowered or codegenned, the
 compiler must emit a diagnostic such as `"closures are not yet implemented"`.
-A stub that compiles silently is indistinguishable from a working implementation
-to both the test suite and the user. Silent stubs are forbidden. (See
-learning-log L013.)
+A stub that compiles silently is indistinguishable from a working
+implementation to both the test suite and the user. Silent stubs are
+forbidden. (See learning-log L013.)
 
 ### Rule 6.10 — Exit criteria must be behavioral, not only structural.
 
@@ -311,22 +312,22 @@ unverifiable assertion.
 The first phase of every wave is a stub audit: a written enumeration of every
 stub in scope for that wave, naming the file, line, current behavior, emitted
 diagnostic, and the task that retires it. This audit must be committed to
-`STUBS.md` before any other task in the wave begins. A wave that proceeds
-past Phase 00 without a committed stub audit is in violation regardless of
+`STUBS.md` before any other task in the wave begins. A wave that proceeds past
+Phase 00 without a committed stub audit is in violation regardless of
 subsequent work quality.
 
-### Rule 6.13 — Wave completion requires a STUBS.md update.
+### Rule 6.13 — Wave completion requires a `STUBS.md` update.
 
 `STUBS.md` at the project root is a normative document listing every current
 stub. A wave is not complete unless every stub it was scheduled to retire has
 been struck from the table and every new stub it introduced has been added with
-a diagnostic and a retiring wave. A wave that leaves STUBS.md unchanged when it
-should change it is incomplete by definition.
+a diagnostic and a retiring wave. A wave that leaves `STUBS.md` unchanged when
+it should change it is incomplete by definition.
 
 ### Rule 6.14 — Wave completion requires a wave closure learning-log entry.
 
-Before a wave is marked complete, a wave closure entry (format: WCxxx) must be
-appended to the learning log. The entry names the proof programs added, the
+Before a wave is marked complete, a wave closure entry (format: `WCxxx`) must
+be appended to the learning log. The entry names the proof programs added, the
 stubs retired, any stubs introduced, what was harder than planned, and what the
 next wave must know. An agent that cannot fill this entry honestly has not
 completed the wave.
@@ -335,20 +336,20 @@ completed the wave.
 
 Phase 00 of every wave must inspect `STUBS.md` for overdue rows. A stub is
 overdue when its `Retiring wave` column names a wave strictly less than the
-current wave and the stub has not yet been retired. Stubs whose retiring
-wave equals the current wave are not overdue at Phase 00 — the current wave
-is, by definition, the wave scheduled to retire them, and the retirement
-work lands during the wave (PCL, per Rule 6.16). If any overdue stub
-exists, the wave cannot begin until every overdue stub is either retired or
-the plan is explicitly revised to reschedule it, with the reschedule reason
-recorded in the stub history log (Rule 6.16).
+current wave and the stub has not yet been retired. Stubs whose retiring wave
+equals the current wave are not overdue at Phase 00 — the current wave is, by
+definition, the wave scheduled to retire them, and the retirement work lands
+during the wave (`PCL`, per Rule 6.16). If any overdue stub exists, the wave
+cannot begin until every overdue stub is either retired or the plan is
+explicitly revised to reschedule it, with the reschedule reason recorded in the
+stub history log (Rule 6.16).
 
 An agent that begins a wave while overdue stubs remain is in violation
-regardless of the wave's eventual outcome. "I'll clean those up at the end"
-is not acceptable — overdue stubs have already proved that deferred cleanup
-does not happen.
+regardless of the wave's eventual outcome. "I'll clean those up at the end" is
+not acceptable — overdue stubs have already proved that deferred cleanup does
+not happen.
 
-### Rule 6.16 — STUBS.md carries an append-only stub history log.
+### Rule 6.16 — `STUBS.md` carries an append-only stub history log.
 
 `STUBS.md` contains two sections:
 
@@ -356,8 +357,8 @@ does not happen.
 2. **Stub history** — an append-only log, organized by wave, of every stub
    creation, retirement, or reschedule event during the project's life.
 
-Every wave closure must append a section to the history log naming the stubs
-it added, the stubs it retired (with the proof program or test that confirmed
+Every wave closure must append a section to the history log naming the stubs it
+added, the stubs it retired (with the proof program or test that confirmed
 retirement), and any stubs it rescheduled (with the reason). The history log
 is never edited in place. A stub that appears and disappears from the active
 table without a corresponding history entry is a violation.
@@ -400,12 +401,13 @@ outputs according to project reproducibility rules.
 
 ### Rule 7.2 — Symbol mangling is stable.
 
-Mangled names depend only on semantic identity, not iteration order or timestamps.
+Mangled names depend only on semantic identity, not iteration order or
+timestamps.
 
 ### Rule 7.3 — No ambient randomness in output-affecting paths.
 
-If unique names are needed, deterministic counters are allowed; random numbers are
-not.
+If unique names are needed, deterministic counters are allowed; random numbers
+are not.
 
 ### Rule 7.4 — No timestamps or absolute paths in goldens.
 
@@ -431,7 +433,8 @@ semantics.
 
 ### Rule 9.1 — One logical change per commit.
 
-Avoid mixed commits that combine unrelated feature, refactor, and formatting work.
+Avoid mixed commits that combine unrelated feature, refactor, and formatting
+work.
 
 ### Rule 9.2 — Commit messages use stable areas.
 
@@ -458,16 +461,16 @@ Task-scoped work should name the wave or task ID in the branch name.
 
 ### Rule 9.5 — Wave phases land in distinct commits.
 
-Every wave's Phase 00 stub audit, implementation, and Phase PCL wave closure
+Every wave's Phase 00 stub audit, implementation, and Phase `PCL` wave closure
 must land as separate git commits, even when the same contributor does all
-three in one session. The phase model (`docs/phase-model.md` §3) treats
-these as distinct temporal phases; the commit history must reflect that
+three in one session. The phase model (`docs/implementation/phase-model.md` §3)
+treats these as distinct temporal phases; the commit history must reflect that
 separation so that:
 
-- the P00 audit is independently verifiable at the closure-SHA predecessor,
-- implementation work is reviewable without being mixed with
-  governance updates, and
-- the PCL commit is a clean retirement record whose diff is only stub
+- the `P00` audit is independently verifiable at the closure-SHA predecessor,
+- implementation work is reviewable without being mixed with governance
+  updates, and
+- the `PCL` commit is a clean retirement record whose diff is only stub
   removal, Stub-history append, `WCxxx` append, and
   `.claude/current-wave.json` update.
 
@@ -481,14 +484,14 @@ The minimum commit sequence per wave is:
    compiler source, tests, and any proof programs. Multiple per-phase
    commits are encouraged when the wave has independent sub-features.
    No `STUBS.md` Active-row removal, no `WCxxx` entry, no
-   current-wave.json phase bump happens here.
+   `current-wave.json` phase bump happens here.
 3. **PCL commit** — removes the retired row from the `STUBS.md` Active
    table, appends the wave's Stub-history block, appends the `WCxxx`
    entry to `docs/learning-log.md`, and bumps
    `.claude/current-wave.json` to `{phase: PCL}`.
 
-Waves W00–W06 pre-date this rule and were landed as single combined
-commits; the retrospective record is in `L020`. Rule 9.5 applies to W07
+Waves `W00`–`W06` pre-date this rule and were landed as single combined
+commits; the retrospective record is in `L020`. Rule 9.5 applies to `W07`
 and every subsequent wave.
 
 ## 10. Learning log rules
@@ -499,13 +502,13 @@ Do not rewrite old entries. Supersede them with new ones.
 
 ### Rule 10.2 — The format is enforced.
 
-Each bug entry (LNNN) must include: reproducer, what was tried first, root cause,
-spec gap, plan gap, fix, cascading effects, architectural lesson, and
+Each bug entry (`LNNN`) must include: reproducer, what was tried first, root
+cause, spec gap, plan gap, fix, cascading effects, architectural lesson, and
 verification.
 
-Each wave closure entry (WCxxx) must include: proof programs added, stubs
-retired, stubs introduced, what was harder than planned, what the next wave must
-know, and verification commands.
+Each wave closure entry (`WCxxx`) must include: proof programs added, stubs
+retired, stubs introduced, what was harder than planned, what the next wave
+must know, and verification commands.
 
 ### Rule 10.3 — The learning log feeds the guide and plan.
 
@@ -514,7 +517,7 @@ must be updated.
 
 ### Rule 10.4 — Wave closure entries are required before wave sign-off.
 
-A wave is not eligible for sign-off until its WCxxx entry exists in the log.
+A wave is not eligible for sign-off until its `WCxxx` entry exists in the log.
 This entry is the evidence that the wave was completed deliberately, not by
 assertion.
 
@@ -534,8 +537,9 @@ Uncommitted work across machines causes silent drift and duplicated debugging.
 
 ### Rule 11.2 — Re-validate after context switches.
 
-When resuming work after a machine or session switch, re-read the relevant docs,
-plan section, recent learning-log entries, and the current state of STUBS.md.
+When resuming work after a machine or session switch, re-read the relevant
+docs, plan section, recent learning-log entries, and the current state of
+`STUBS.md`.
 
 ## 12. Safety and `unsafe`
 
@@ -566,8 +570,8 @@ explicitly.
 - treating bootstrap C11 details as permanent language semantics
 - marking a task done without running its `Verify:` command
 - marking a wave done without CI-passing proof programs in `tests/e2e/`
-- marking a wave done without a WCxxx learning-log entry
-- leaving STUBS.md stale at wave boundaries
+- marking a wave done without a `WCxxx` learning-log entry
+- leaving `STUBS.md` stale at wave boundaries
 - beginning a wave while any prior wave's stubs are overdue
 - retiring a stub without a corresponding stub history log entry
 
@@ -595,7 +599,7 @@ An AI agent working on this repository MUST also, at wave boundaries:
 
 - not mark a wave complete unless all proof programs for that wave pass in CI
 - update `STUBS.md` to reflect all retirements and introductions from the wave
-- append a WCxxx wave closure entry to the learning log before declaring the
+- append a `WCxxx` wave closure entry to the learning log before declaring the
   wave done
 - treat a failing `Verify:` command as a bug in the implementation, not as a
   reason to revise the `Verify:` command to pass
@@ -605,6 +609,7 @@ An AI agent working on this repository MUST NOT:
 - assert that a test passes without running it
 - assert that a proof program produces the correct output without committing it
   and observing CI
-- close a wave whose STUBS.md entries have not been updated
-- close a wave without a WCxxx learning-log entry
-- interpret "the code looks correct" as equivalent to "the Verify command passes"
+- close a wave whose `STUBS.md` entries have not been updated
+- close a wave without a `WCxxx` learning-log entry
+- interpret "the code looks correct" as equivalent to "the Verify command
+  passes"

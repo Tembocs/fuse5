@@ -1,8 +1,8 @@
 # Implementation Tree
 
-> Status: canonical implementation planning tree for the Attempt 6 meta docs.
+> Status: canonical implementation planning tree for the staged Fuse docs.
 
-This directory stages the future `docs/implementation/` tree for Attempt 6.
+This directory stages the future `docs/implementation/` tree for Fuse.
 It owns delivery sequencing, wave closure, proof expectations, and
 feature-to-wave ownership. It is not a second language reference; it is the
 execution plan that retires the language reference honestly.
@@ -41,7 +41,7 @@ W00 through W30.
 
 ## Stdlib ownership in the meta plan
 
-The expanded Attempt 6 language reference now names the baseline standard
+The expanded staged language reference now names the baseline standard
 library explicitly. The implementation tree therefore assigns ownership by wave
 rather than leaving modules implied by broad labels.
 

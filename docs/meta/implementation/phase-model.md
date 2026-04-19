@@ -1,11 +1,11 @@
 # Fuse Phase Model
 
-> Status: normative for the Attempt 6 meta implementation tree.
+> Status: normative for the staged Fuse implementation tree.
 >
 > This document describes the phase model used throughout the
 > implementation plan. It is a reference for contributors and agents working
-> in the staged `docs/meta/` tree. The canonical rule set lives in the Fuse
-> rules document and in [../implementation-plan.md](../implementation-plan.md).
+> in the staged documentation tree. The canonical rule set lives in
+> [../rules.md](../rules.md) and [../implementation-plan.md](../implementation-plan.md).
 
 ## Identifiers
 
@@ -52,7 +52,7 @@ Rule 6.12 requires every wave to begin with a stub audit. Phase 00:
 1. Enumerates every stub in scope for the wave, naming the file:line,
    current behavior, emitted diagnostic, and the task that retires it.
 2. Checks `STUBS.md` for overdue rows (Rule 6.15). A stub is overdue when
-   its retiring wave is numerically ≤ the current wave and it has not
+  its retiring wave is numerically less than the current wave and it has not
    yet been retired. Any overdue stub blocks wave entry until retired or
    explicitly rescheduled.
 3. Commits the audit to `STUBS.md` before any implementation phase

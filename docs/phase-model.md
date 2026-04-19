@@ -34,7 +34,7 @@ Rule 6.12 requires every wave to begin with a stub audit. Phase 00:
 1. Enumerates every stub in scope for the wave, naming the file:line,
    current behavior, emitted diagnostic, and the task that retires it.
 2. Checks `STUBS.md` for overdue rows (Rule 6.15). A stub is overdue when
-   its retiring wave is numerically ≤ the current wave and it has not
+  its retiring wave is numerically less than the current wave and it has not
    yet been retired. Any overdue stub blocks wave entry until retired or
    explicitly rescheduled.
 3. Commits the audit to `STUBS.md` before any implementation phase
