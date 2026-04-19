@@ -247,6 +247,9 @@ Supporting planning documents for the meta tree:
 
 - [implementation/README.md](implementation/README.md) — implementation-tree index and stdlib ownership summary
 - [implementation/phase-model.md](implementation/phase-model.md) — required phase, task, verification, and closure model
+- [repository-layout.md](repository-layout.md) — repository structure contract the wave docs must preserve
+- [registry-protocol.md](registry-protocol.md) — frozen Wave 23 package-registry specification
+- [audit.md](audit.md) — practical wave-completion audit checklist for closure reviews
 
 Wave documents are expected to stay aligned with the staged language reference,
 especially the `language-reference/core/` and `language-reference/full/`

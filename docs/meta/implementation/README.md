@@ -35,6 +35,12 @@ away to make another easier.
   implementation-plan entry point for the meta tree
 - [phase-model.md](phase-model.md) — required phase, task, verification, and
   closure model used by every wave document
+- [../repository-layout.md](../repository-layout.md) — repository structure
+  contract for file placement, top-level directories, and docs ownership
+- [../registry-protocol.md](../registry-protocol.md) — frozen Wave 23 package
+  registry contract
+- [../audit.md](../audit.md) — wave-completion audit checklist used during
+  closure review and sign-off
 
 The per-wave documents in this directory are the detailed delivery contracts for
 W00 through W30.

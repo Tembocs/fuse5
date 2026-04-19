@@ -30,9 +30,13 @@ Before writing code in this repository, a contributor or AI agent MUST:
 1. Read `README.md`.
 2. Read `docs/language-reference/fuse-language-reference.md`.
 3. Read `docs/implementation-plan.md` and locate the current wave and phase.
-4. Read `docs/learning-log.md`, especially recent entries.
-5. Read `STUBS.md` and identify every active stub in scope for the current wave.
-6. Check the working tree state.
+4. Read `docs/repository-layout.md`.
+5. Read `docs/learning-log.md`, especially recent entries.
+6. Read `STUBS.md` and identify every active stub in scope for the current wave.
+7. Check the working tree state.
+
+If the task is a wave-completion audit or sign-off review, also read
+`docs/audit.md` before evaluating the closure claim.
 
 Before committing, a contributor or AI agent MUST:
 

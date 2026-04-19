@@ -69,16 +69,23 @@ the documents are the place to start.
 |---|---|
 | `docs/language-reference/fuse-language-reference.md` | Language specification and implementation contracts |
 | `docs/implementation-plan.md` | Build plan from bootstrap to self-hosting |
+| `docs/repository-layout.md` | Repository structure and placement rules |
 | `docs/rules.md` | Contributor and agent discipline rules |
 | `docs/learning-log.md` | Append-only lessons from bugs, design gaps, and fixes |
 
-There are two additional normative files at the repository root that are not
-ordinary documentation:
+There are three additional normative artifacts outside the core docs list:
 
 | File | Purpose |
 |---|---|
+| `docs/registry-protocol.md` | Frozen Wave 23 package-registry wire contract |
 | `STUBS.md` | Live registry of every compiler stub, its diagnostic, and the wave that retires it |
 | `tests/e2e/README.md` | Registry of every end-to-end proof program and its expected output |
+
+Reference companion documents used during delivery and sign-off:
+
+| File | Purpose |
+|---|---|
+| `docs/audit.md` | Practical wave-completion audit checklist used to verify closure claims |
 
 `STUBS.md` tracks features that parse and may type-check but are not fully
 implemented. Every such feature must emit a diagnostic rather than silently
@@ -92,8 +99,11 @@ If you are approaching the project for the first time:
 1. Read `docs/rules.md`.
 2. Read `docs/implementation-plan.md`.
 3. Read `docs/language-reference/fuse-language-reference.md`.
-4. Check `STUBS.md`.
-5. Read `docs/learning-log.md` for the project's accumulated lessons.
+4. Read `docs/repository-layout.md`.
+5. Check `STUBS.md`.
+6. Read `docs/learning-log.md` for the project's accumulated lessons.
+7. If you are working on package acquisition, read `docs/registry-protocol.md`.
+8. If you are auditing wave completion, read `docs/audit.md`.
 
 ## Status
 

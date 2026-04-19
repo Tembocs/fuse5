@@ -107,7 +107,7 @@ go test ./tests/e2e/... -run TestTwoCrateProject -v
 - Task 01: Index format [W23-P04-T01-INDEX]
   DoD: registry index is a deterministic, line-oriented file listing
   every published (name, version, url, sha256, dependencies) tuple.
-  Specified in `docs/registry-protocol.md`.
+  Specified in [../registry-protocol.md](../registry-protocol.md).
   Verify: `test -f docs/registry-protocol.md && go test ./compiler/pkg/... -run TestRegistryIndexParse -v`
 - Task 02: Package metadata schema [W23-P04-T02-METADATA]
   DoD: metadata returned for a given (name, version) is JSON with a
@@ -115,7 +115,7 @@ go test ./tests/e2e/... -run TestTwoCrateProject -v
   Verify: `go test ./compiler/pkg/... -run TestRegistryMetadata -v`
 - Task 03: Publishing model (spec only) [W23-P04-T03-PUBLISH-SPEC]
   DoD: the publishing flow (authentication, tarball upload, index
-  append) is specified in `docs/registry-protocol.md`. Implementation of
+  append) is specified in [../registry-protocol.md](../registry-protocol.md). Implementation of
   a hosted reference registry is out of scope for v1; the spec is frozen.
   Verify: `go run tools/checkdocs/main.go -registry-protocol-frozen`
 
